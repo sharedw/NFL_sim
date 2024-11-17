@@ -1,0 +1,28 @@
+[project]
+name = "nfl-sim"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "beautifulsoup4",
+    "matplotlib",
+    "numpy",
+    "pandas",
+    "protobuf",
+    "requests",
+    "scipy",
+    "streamlit",
+    "tls-client",
+    "Unidecode",
+    "ipykernel>=6.29.5",
+    "utils",
+    "pip>=24.3.1",
+    "lxml>=5.3.0",
+    "xgboost>=2.1.2",
+    "scikit-learn>=1.5.2",
+    "pyyaml>=6.0.2",
+]
+
+[tool.uv.sources]
+utils = { path = '..\NBA_betting_model\utils' }
