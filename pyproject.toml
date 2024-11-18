@@ -22,6 +22,8 @@ dependencies = [
     "xgboost>=2.1.2",
     "scikit-learn>=1.5.2",
     "pyyaml>=6.0.2",
+    "seaborn>=0.13.2",
+    "ngboost>=0.5.1",
 ]
 
 [tool.uv.sources]
