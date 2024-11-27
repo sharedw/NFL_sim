@@ -12,29 +12,25 @@ from sklearn.metrics import (
     mean_squared_error,
     r2_score,
 )
-#11, 109
-#23, 119
-#24, 125
-class ThreeLayerClassifier(nn.Module):
-    def __init__(self, n_in=11, n_out=109, n_hidden=50):
-        super(ThreeLayerClassifier, self).__init__()
-        self.hidden1 = nn.Linear(n_in, n_hidden)
-        self.hidden2 = nn.Linear(n_hidden, n_hidden)
-        self.hidden3 = nn.Linear(n_hidden, n_hidden)
-        self.output_layer = nn.Linear(n_hidden + 1, n_out)  # +1 for the additional feature
+
+class WithDropout(nn.Module):
+    def __init__(self, n_in=11, n_out=109, n_hidden=50, dropout_prob=0.):
+        super(WithDropout, self).__init__()
+        self.main_layers = nn.Sequential(
+        nn.Linear(n_in, n_hidden),nn.ReLU(),
+        nn.Linear(n_hidden, n_hidden),nn.ReLU(),
+        nn.Dropout(p=dropout_prob),
+        nn.Linear(n_hidden, n_hidden),nn.ReLU(),
+        )
+        self.add_yardline = nn.Linear(n_hidden + 1, n_out)
     def forward(self, x):
         # Extract the feature to pass to the final layer (e.g., the first feature)
         feature_to_pass = x[:, 0].unsqueeze(1)  # Assuming you want the first feature, shape [batch_size, 1]
         
-        # Pass through the first two layers
-        x = F.relu(self.hidden1(x))
-        x = F.relu(self.hidden2(x))
-        x = F.relu(self.hidden3(x))
-        # Concatenate the extracted feature with the output of the hidden layers
-        x = torch.cat((x, feature_to_pass), dim=1)  # Concatenate along the feature axis (dim=1)
+        x = self.main_layers(x)
+        x = torch.cat((x, feature_to_pass), dim=1) 
+        x = self.add_yardline(x)
         
-        # Pass through the final layer
-        x = self.output_layer(x)
         return x
 
 
