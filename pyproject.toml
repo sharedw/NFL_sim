@@ -29,10 +29,8 @@ dependencies = [
     "torch",
     "appdirs>=1.4.4",
     "quantile-forest>=1.3.11",
-    "zuko>=1.3.1",
-    "einops>=0.8.0",
-    "coral-pytorch>=1.4.0",
     "sklearn-quantile>=0.0.32",
+    "duckdb>=1.1.3",
 ]
 
 [tool.uv.sources]
@@ -40,3 +38,6 @@ utils = { path = '..\NBA_betting_model\utils' }
 
 [tool.uv.pip]
 extra-index-url = ["https://download.pytorch.org/whl/cu124"]
+
+[tool.setuptools]
+py-modules = []

@@ -20,3 +20,4 @@ pytz
 pip
 pyarrow
 fastparquet
+appdirs

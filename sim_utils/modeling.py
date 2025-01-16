@@ -13,24 +13,31 @@ from sklearn.metrics import (
     r2_score,
 )
 
+
 class WithDropout(nn.Module):
-    def __init__(self, n_in=11, n_out=109, n_hidden=50, dropout_prob=0.):
+    def __init__(self, n_in=11, n_out=109, n_hidden=50, dropout_prob=0.0):
         super(WithDropout, self).__init__()
         self.main_layers = nn.Sequential(
-        nn.Linear(n_in, n_hidden),nn.ReLU(),
-        nn.Linear(n_hidden, n_hidden),nn.ReLU(),
-        nn.Dropout(p=dropout_prob),
-        nn.Linear(n_hidden, n_hidden),nn.ReLU(),
+            nn.Linear(n_in, n_hidden),
+            nn.ReLU(),
+            nn.Linear(n_hidden, n_hidden),
+            nn.ReLU(),
+            nn.Dropout(p=dropout_prob),
+            nn.Linear(n_hidden, n_hidden),
+            nn.ReLU(),
         )
         self.add_yardline = nn.Linear(n_hidden + 1, n_out)
+
     def forward(self, x):
         # Extract the feature to pass to the final layer (e.g., the first feature)
-        feature_to_pass = x[:, 0].unsqueeze(1)  # Assuming you want the first feature, shape [batch_size, 1]
-        
+        feature_to_pass = x[:, 0].unsqueeze(
+            1
+        )  # Assuming you want the first feature, shape [batch_size, 1]
+
         x = self.main_layers(x)
-        x = torch.cat((x, feature_to_pass), dim=1) 
+        x = torch.cat((x, feature_to_pass), dim=1)
         x = self.add_yardline(x)
-        
+
         return x
 
 
@@ -52,7 +59,7 @@ def create_model(df, x_cols, y_col, colsample_bytree=0.5):
     # Compute confusion matrix
     cm = confusion_matrix(y_test, y_pred)
     print("Confusion Matrix:")
-    display(cm) # type: ignore
+    print(cm)
     return model
 
 
@@ -63,7 +70,10 @@ def create_reg_model(df, x_cols, y_col):
         X, y, test_size=0.2, random_state=42
     )
     model = xgb.XGBRegressor(
-        objective="reg:squarederror", n_estimators=100, colsample_bytree=0.5
+        objective="reg:squarederror",
+        n_estimators=100,
+        colsample_bytree=0.5,
+        enable_categorical=True,
     )
     model.fit(X_train, y_train)
 
@@ -77,6 +87,7 @@ def create_reg_model(df, x_cols, y_col):
     print(f"R-squared: {r2}")
 
     return model
+
 
 def update_config(new_config):
     yaml_path = "models/feature_config.yaml"
