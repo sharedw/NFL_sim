@@ -31,10 +31,12 @@ dependencies = [
     "quantile-forest>=1.3.11",
     "sklearn-quantile>=0.0.32",
     "duckdb>=1.1.3",
+    "nflreadpy>=0.1.1",
+    "sqlalchemy>=2.0.43",
 ]
 
 [tool.uv.sources]
-utils = { path = '..\NBA_betting_model\utils' }
+utils = { path = "./utils", editable = true }
 
 [tool.uv.pip]
 extra-index-url = ["https://download.pytorch.org/whl/cu124"]
