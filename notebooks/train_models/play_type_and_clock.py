@@ -1,13 +1,8 @@
 import pandas as pd
-import yaml
 import joblib
-import xgboost as xgb
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
-import numpy as np
 from sim_utils.modeling import create_model, create_reg_model, update_config
 
-
+print('import successful')
 
 pbp = pd.read_parquet("data/pbp.parquet")
 
@@ -31,7 +26,7 @@ print("data read in successfully..")
 context_cols = [
     "play_id",
     "game_id",
-    "home_team",
+    "team",
     "away_team",
     "game_half",
     "posteam",
@@ -43,8 +38,8 @@ context_cols = [
 pbp = pbp.merge(
     team,
     left_on=["posteam", "season", "week"],
-    right_on=["recent_team", "season", "week"],
-).drop("recent_team", axis=1)
+    right_on=["team", "season", "week"],
+).drop("team", axis=1)
 pbp = pbp.merge(
     opp,
     left_on=["defteam", "season", "week"],

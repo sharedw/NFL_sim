@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import yaml
 import xgboost as xgb
+import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
     accuracy_score,
@@ -74,7 +75,7 @@ def create_model(df, x_cols, y_col, colsample_bytree=0.5):
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
-    model = xgb.XGBClassifier(eval_metric="mlogloss", colsample_bytree=colsample_bytree)
+    model = xgb.XGBClassifier(eval_metric="mlogloss", colsample_bytree=colsample_bytree, missing=np.nan)
     model.fit(X_train, y_train)
 
     y_pred = model.predict(X_test)
