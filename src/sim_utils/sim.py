@@ -4,37 +4,52 @@ import pandas as pd
 import joblib
 import numpy as np
 import torch
-from sim_utils.modeling import WithDropout, masked_model
+from sim_utils.modeling import WithDropout
 import warnings
+from utils.quack import Quack
+import yaml
+from sim_utils.sim_models import ChooseRusherModel, RushYardsModel
 
-team_rb_stats = pd.read_csv("data/team_rushers.csv", index_col=0)
-team_qb_stats = pd.read_csv("data/team_qb_stats.csv", index_col=0)
-team_receiver_stats = pd.read_csv("data/team_receiver_stats.csv", index_col=0)
-team_stats = pd.read_csv("data/agg/team_stats.csv", index_col=0).rename(
-    {"recent_team": "team_name"}, axis=1
-)
-opp_stats = pd.read_csv("data/agg/opp_stats.csv", index_col=0).rename(
-    {"opponent_team": "team_name"}, axis=1
-)
+with open("models/feature_config.yaml", "r") as file:
+    CONFIG = yaml.safe_load(file)
 
-players = pd.read_parquet("data/agg/player_weekly_agg.parquet").fillna(0)
+team_rb_stats = Quack.fetch_table('team_rushers')
+team_qb_stats = Quack.fetch_table('team_qb_stats')
+team_receiver_stats = Quack.fetch_table('team_receiver_stats')
+team_stats = Quack.fetch_table('team_feats')
+opp_stats = Quack.fetch_table('opp_feats')
+players = Quack.fetch_table('player_weekly_agg')
+
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = "cpu"
-model_path = "models/run_yards_gained.pt"
-run_yards_model = masked_model(n_in=17, n_hidden=1024, n_out=130).to(device)
-run_yards_model.load_state_dict(torch.load(model_path, weights_only=True))
+
+RUN_YARDS_MODEL = RushYardsModel(CONFIG)
 
 air_yards_path = "models/air_yards.pt"
-air_yards_model = WithDropout(n_in=28, n_out=119)
-air_yards_model.load_state_dict(torch.load(air_yards_path, weights_only=True))
-
+AIR_YARDS_MODEL = WithDropout(n_in=28, n_out=119)
+AIR_YARDS_MODEL.load_state_dict(torch.load(air_yards_path, weights_only=True))
 
 yac_model_path = "models/yac.pt"
-yac_model = WithDropout(n_in=29, n_out=125)
-yac_model.load_state_dict(torch.load(yac_model_path, weights_only=True))
+YAC_MODEL = WithDropout(n_in=29, n_out=125)
+YAC_MODEL.load_state_dict(torch.load(yac_model_path, weights_only=True))
 
-qrf_run_yards = joblib.load("models/rush_yards_qrf.joblib")
+CLOCK_MODEL = joblib.load("models/clock_model.joblib")
+
+#CHOOSE_RUSHER_MODEL = joblib.load("models/choose_rusher.joblib")
+CHOOSE_RUSHER_MODEL = ChooseRusherModel(CONFIG)
+
+CHOOSE_RECEIVER_MODEL = joblib.load("models/choose_receiver.joblib")
+
+COMPLETE_PASS_MODEL = joblib.load("models/complete_pass.joblib")
+
+
+
+
+
+
+#QRF_RUN_YARDS = joblib.load("models/rush_yards_qrf.joblib")
 
 stat_cols = [
     "completions",
@@ -52,7 +67,6 @@ stat_cols = [
     "passing_epa",
     "passing_2pt_conversions",
     "pacr",
-    "dakota",
     "carries",
     "rushing_yards",
     "rushing_tds",
@@ -81,14 +95,19 @@ stat_cols = [
     "fantasy_points_ppr",
 ]
 
+
 def fetch_row_or_latest(df, team, season, week):
-    df = df.loc[(df.team_name == team) & (df.season == season)]
-    row = df.loc[(df.week == min(df.week.max(), week))].to_dict(orient="records")[0]
+    try:
+        df = df.loc[(df.team == team) & (df.season == season)]
+        row = df.loc[(df.week == min(df.week.max(), week))].to_dict(orient="records")[0]
+    except Exception as e:
+        print(f'No data exists for {team} in {season}')
+        raise e
     return row
 
 class Player:
     def __init__(self, d):
-        self.name = d["full_name"]
+        self.name = d["player_display_name"]
         self.id = d["gsis_id"]
         self.depth_team = int(d["dense_depth"])
         self.stats = {x: 0 for x in stat_cols}
@@ -138,7 +157,6 @@ class Player:
 class QB(Player):
     def __init__(self, d):  # noqa: F811
         super().__init__(d)
-        self.name = d["full_name"]
         self.features = d.to_dict()
         self.position = "QB"
 
@@ -149,8 +167,6 @@ class QB(Player):
 class RB(Player):
     def __init__(self, d):
         super().__init__(d)
-        self.name = d["full_name"]
-        self.id = d["gsis_id"]
         self.position = "RB"
         self.features = d.to_dict()
 
@@ -163,8 +179,6 @@ class RB(Player):
 class WR(Player):
     def __init__(self, d):
         super().__init__(d)
-        self.name = d["full_name"]
-        self.id = d["gsis_id"]
         self.position = "WR"
 
     def __repr__(self):
@@ -174,8 +188,6 @@ class WR(Player):
 class TE(Player):
     def __init__(self, d):
         super().__init__(d)
-        self.name = d["full_name"]
-        self.id = d["gsis_id"]
         self.position = "TE"
 
     def __repr__(self):
@@ -185,12 +197,10 @@ class TE(Player):
 class K(Player):
     def __init__(self, d):
         super().__init__(d)
-        self.name = d["full_name"]
-        self.id = d["gsis_id"]
-        self.position = "TE"
+        self.position = "K"
 
     def __repr__(self):
-        return f"TE:{self.name} has {self.receptions} receptions for {self.receiving_yards} yards"
+        return f"K:{self.name} has placeholder FG and placeholder PAT."
 
 
 class Team:
@@ -202,11 +212,11 @@ class Team:
         self.team_stats = fetch_row_or_latest(team_stats, self.name, season, week)
         self.opp_stats = fetch_row_or_latest(opp_stats, self.name, season, week)
         self.roster = players.loc[
-            (players.team_name == name) & (players.season == season)
+            (players.team == name) & (players.season == season)
         ]
         self.roster = self.roster.loc[
             (self.roster.week == min(self.roster.week.max(), week))
-            & (self.roster.formation == "Offense")
+            #& (self.roster.formation == "Offense")
             & (self.roster.position.isin(["QB", "WR", "TE", "RB", "K"]))
         ].sort_values(by="dense_depth")
 
@@ -264,7 +274,7 @@ class Team:
 
     def game_results(self, df=False):
         r = [
-            {"team_name": self.name, "position": x.position, "id": x.id}
+            {"team": self.name, "position": x.position, "id": x.id}
             | x.stats_to_dict()
             for x in self.players
         ]
@@ -284,8 +294,7 @@ class Team:
 class Play(ABC):
     def __init__(self, game):
         self.game = game
-        self.clock_cols = game.config["clock_cols"]
-        self.clock_model = joblib.load("models/clock_model.joblib")
+        self.clock_cols = CONFIG["clock_cols"]
         self.play_context = {}
         self.play_data = {'incomplete_pass':0,
                           'out_of_bounds':0,
@@ -323,7 +332,7 @@ class Play(ABC):
         )
         raw_features['play_type_enc'] = self.game.int_from_play[self.game.pbp[-1]['play_type']]
         features = np.array([[raw_features[key] for key in self.clock_cols]])
-        t = self.clock_model.predict(features).item()
+        t = CLOCK_MODEL.predict(features).item()
         return t
 
 
@@ -350,10 +359,8 @@ class RunPlay(Play):
     def __init__(self, game):
         super().__init__(game)
         self.play_type='run'
-        self.choose_rusher_model = joblib.load("models/choose_rusher.joblib")
-        self.choose_rusher_cols = game.config["choose_rusher_cols"]
-        self.rusher_idx_to_pos = game.config["rusher_idx_to_pos"]
-        self.rush_yard_cols = game.config["rush_yard_cols"]
+        self.rusher_idx_to_pos = CONFIG["rusher_idx_to_pos"]
+        self.rush_yard_cols = CONFIG["rush_yard_cols"]
 
     def choose_rusher(self, team):
         raw_features = self.collect_features(
@@ -361,36 +368,30 @@ class RunPlay(Play):
             team.features,
             self.game.defending.opp_stats,
         )
-        features = [raw_features[key] for key in self.choose_rusher_cols]
-        preds = self.choose_rusher_model.predict_proba([features])
-        rusher_idx = np.random.choice(len(preds[0]), p=preds[0])
+        rusher_idx = CHOOSE_RUSHER_MODEL.predict(raw_features)
         pos, depth = self.rusher_idx_to_pos[rusher_idx].split("_")
         player = team.get_depth_pos(pos, int(depth))
         team.features["last_rusher_team"] = rusher_idx
         team.features["last_rusher_drive"] = rusher_idx
         return player
 
-    def sample_run_yards(self, model, team, player):
+    def sample_run_yards(self, team, player):
         raw_features = self.collect_features(
             player.features,
             team.team_stats,
             team.opponent.opp_stats,
         )
-        x = [raw_features[key] for key in self.rush_yard_cols]
-        x = torch.tensor(x).to(device)
-        with torch.no_grad():
-            preds = model(x.reshape(1, -1))[0]
-            preds = torch.softmax(preds, 0)
-        sample = (torch.multinomial(preds, 1)).item() - 30
+        sample = RUN_YARDS_MODEL.predict(raw_features)
         return min((sample, raw_features["yardline_100"]))
 
     def execute_play(self, team):
-        player = self.choose_rusher(team)
-        yds = self.sample_run_yards(run_yards_model, team, player)
-        self.player = player
+        self.player = self.choose_rusher(team)
+        yds = self.sample_run_yards(team, self.player)
+        yds = min(yds, self.game.ball_position)
         return yds
 
     def update_game_state(self, team, yds):
+            #super().update_game_state()
             self.player.carries += 1
             self.player.rushing_yards += yds
             self.game.player = self.player.name
@@ -415,14 +416,13 @@ class PassPlay(Play):
     def __init__(self, game):
         super().__init__(game)
         self.play_type='pass'
-        self.choose_receiver = joblib.load("models/choose_receiver.joblib")
-        self.choose_receiver_cols = game.config["choose_receiver_cols"]
-        self.air_yards_cols = game.config["air_yards_cols"]
-        self.receiver_idx_to_pos = game.config["receiver_idx_to_pos"]
-        self.complete_pass_cols = game.config["complete_pass_cols"]
-        self.complete_pass_model = joblib.load("models/complete_pass.joblib")
 
-    def sample_air_and_yac(self, air_model, yac_model, team, player):
+        self.choose_receiver_cols = CONFIG["choose_receiver_cols"]
+        self.air_yards_cols = CONFIG["air_yards_cols"]
+        self.receiver_idx_to_pos = CONFIG["receiver_idx_to_pos"]
+        self.complete_pass_cols = CONFIG["complete_pass_cols"]
+
+    def sample_air_and_yac(self, team, player):
         raw_features = self.collect_features(
             player.features,
             team.team_stats,
@@ -431,7 +431,7 @@ class PassPlay(Play):
         x = [raw_features[key] for key in self.air_yards_cols]
         x = torch.tensor(x)
         with torch.no_grad():
-            preds = air_model(x.reshape(1, -1))[0]
+            preds = AIR_YARDS_MODEL(x.reshape(1, -1))[0]
             preds = torch.softmax(preds, 0)
         air_yards = (torch.multinomial(preds, 1)).item() - 20
         if air_yards >= self.game.ball_position:  # touchdown at catch
@@ -439,7 +439,7 @@ class PassPlay(Play):
 
         x = torch.cat((x, torch.tensor([air_yards])))
         with torch.no_grad():
-            preds = yac_model(x.reshape(1, -1))[0]
+            preds = YAC_MODEL(x.reshape(1, -1))[0]
             preds = torch.softmax(preds, 0)
         yac = (torch.multinomial(preds, 1)).item() - 25
         yac = min(yac, (self.game.ball_position - air_yards))
@@ -457,7 +457,7 @@ class PassPlay(Play):
         qb_features = {(key + "_qb"): value for key, value in qb.features.items()}
         raw_features.update(qb_features)
         features = [raw_features[key] for key in self.complete_pass_cols]
-        preds = self.complete_pass_model.predict_proba([features])
+        preds = COMPLETE_PASS_MODEL.predict_proba([features])
         receiver = np.random.choice(len(preds[0]), p=preds[0])
         return np.random.choice(len(preds[0]), p=preds[0])
     
@@ -467,7 +467,7 @@ class PassPlay(Play):
             team.features,
         )
         features = [raw_features[key] for key in self.choose_receiver_cols]
-        preds = self.choose_receiver.predict_proba([features])
+        preds = CHOOSE_RECEIVER_MODEL.predict_proba([features])
         receiver = np.random.choice(len(preds[0]), p=preds[0])
         pos, depth = self.receiver_idx_to_pos[receiver].split("_")
         receiver = team.get_depth_pos(pos, int(depth))
@@ -479,7 +479,7 @@ class PassPlay(Play):
         passer.attempts += 1
         receiver.targets += 1
         air_yards, yac = self.sample_air_and_yac(
-            air_yards_model, yac_model, team, receiver
+            team, receiver
         )
 
         if self.sample_completion(passer, receiver, team, air_yards):
@@ -572,8 +572,7 @@ class DefTimeout(Play):
         return 0
 
 class GameState:
-    def __init__(self, away, home, config, **kwargs):
-        self.config = config
+    def __init__(self, away, home, **kwargs):
         self.home = home
         self.away = away
         home.opponent = self.away
@@ -582,8 +581,8 @@ class GameState:
         away.spread_line = -1 * self.home.spread_line
         self.total_line = kwargs.get("total_line", 42)
         self.run_or_pass = joblib.load("models/run_or_pass.joblib")
-        self.run_or_pass_cols = config["run_or_pass_cols"]
-        self.play_encoding = config["play_encoding"]
+        self.run_or_pass_cols = CONFIG["run_or_pass_cols"]
+        self.play_encoding = CONFIG["play_encoding"]
         self.int_from_play = {v: k for k, v in self.play_encoding.items()}
         self.wind = kwargs.get("wind", random.randint(0, 10))
         self.temp = kwargs.get("temp", random.randint(40, 90))

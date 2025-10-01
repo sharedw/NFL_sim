@@ -11,34 +11,26 @@ from sklearn.metrics import (
     r2_score,
 )
 
+
 class masked_model(nn.Module):
-    def __init__(self, n_in=11, n_out=109, n_hidden=50, dropout_prob=0.):
-        super(masked_model, self).__init__()
-        self.n_out=n_out
-        self.main_layers = nn.Sequential(
-        nn.Linear(n_in, n_hidden),nn.ReLU(),
-        nn.Linear(n_hidden, n_hidden),nn.ReLU(),
-        nn.Dropout(p=dropout_prob),
-        nn.Linear(n_hidden, n_hidden),nn.ReLU(),
-        )
-        self.add_yardline = nn.Linear(n_hidden + 1, n_out)
-    def forward(self, x):
-        # Extract the feature to pass to the final layer (e.g., the first feature)
-        feature_to_pass = x[:, 0].unsqueeze(1)  # Assuming you want the first feature, shape [batch_size, 1]
+	def __init__(self, n_in=11, n_out=109, n_hidden=50, dropout_prob=0.):
+		super(masked_model, self).__init__()
+		self.n_out=n_out
+		self.main_layers = nn.Sequential(
+		nn.Linear(n_in, n_hidden),nn.ReLU(),
+		nn.Linear(n_hidden, n_hidden),nn.ReLU(),
+		nn.Dropout(p=dropout_prob),
+		nn.Linear(n_hidden, n_hidden),nn.ReLU(),
+		)
+		self.add_yardline = nn.Linear(n_hidden + 1, n_out)
+	def forward(self, x):
+		# Extract the feature to pass to the final layer (e.g., the first feature)
+		feature_to_pass = x[:, 0].unsqueeze(1)  # Assuming you want the first feature, shape [batch_size, 1]
 
-        x = self.main_layers(x)
-        x = torch.cat((x, feature_to_pass), dim=1) 
-        x = self.add_yardline(x)
-
-
-
-        end_zone = feature_to_pass[:,0].clone().detach().view(-1)
-        accum_mask = torch.nn.functional.one_hot(end_zone.type(torch.LongTensor)+30, self.n_out)
-        accum_mask =  accum_mask +  torch.sum(accum_mask, dim=1, keepdims=True) - torch.cumsum(accum_mask, dim=1)
-        accum_mask = accum_mask.type(torch.bool)
-        x = x.masked_fill(~accum_mask, float('-1000'))
-
-        return x
+		x = self.main_layers(x)
+		x = torch.cat((x, feature_to_pass), dim=1) 
+		x = self.add_yardline(x)
+		return x
 
 
 class WithDropout(nn.Module):
