@@ -31,3 +31,13 @@ class Quack:
         finally:
             con.close()
         return df
+    
+    def select_columns(cols:list, alias:str=None, coalesce=False):
+
+        if alias:
+            temp = (f'{alias}.' + x for x in cols)
+        else:
+            temp = cols
+        if coalesce:
+            temp = (f'coalesce({x}, 0) as {y}' for x,y in zip(temp, cols))
+        return ', '.join(temp)

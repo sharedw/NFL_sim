@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import yaml
 import xgboost as xgb
 import numpy as np
@@ -10,6 +11,41 @@ from sklearn.metrics import (
     mean_squared_error,
     r2_score,
 )
+
+class FocalLoss(nn.Module):
+	def __init__(self, gamma=2.0):
+		super().__init__()
+		self.gamma = gamma
+	
+	def forward(self, logits, targets):
+		ce_loss = F.cross_entropy(logits, targets, reduction='none')
+		pt = torch.exp(-ce_loss)
+		focal_loss = ((1 - pt) ** self.gamma) * ce_loss
+		return focal_loss.mean()
+	
+class FocalLossSoft(nn.Module):
+	def __init__(self, gamma=2.0):
+		super().__init__()
+		self.gamma = gamma
+
+	def forward(self, logits, targets):  # targets: [B, num_classes]
+		log_probs = F.log_softmax(logits, dim=1)
+		probs = log_probs.exp()
+		loss = -((1 - probs) ** self.gamma) * targets * log_probs
+		return loss.sum(dim=1).mean()
+
+
+class ResBlock(nn.Module):
+	def __init__(self, n_hidden):
+		super().__init__()
+		self.layer = nn.Sequential(
+			nn.LayerNorm(n_hidden),
+			nn.Linear(n_hidden, n_hidden),
+			nn.ReLU()
+		)
+	
+	def forward(self, x):
+		return x + self.layer(x)
 
 
 class masked_model(nn.Module):
