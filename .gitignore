@@ -160,7 +160,7 @@ cython_debug/
 #.idea/
 
 
-/data
+/data/*
+!data/queries/
+!data/queries/** 
 /models
-data/pbp.csv
-data/pbp.parquet
