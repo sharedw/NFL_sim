@@ -12,6 +12,37 @@ from sklearn.metrics import (
     r2_score,
 )
 
+
+def adjacent_label_smoothing(labels, yardline, num_classes=130, smoothing=0.1):
+	batch_size = labels.size(0)
+	device = labels.device
+	
+	smoothed = torch.zeros(batch_size, num_classes, device=device)
+	idx = torch.arange(batch_size, device=device)  # ensure GPU
+
+	# main label
+	smoothed[idx, labels] = 1.0 - smoothing
+
+	# left
+	left_idx = labels - 1
+	valid_left = left_idx >= 0
+	smoothed[idx[valid_left], left_idx[valid_left]] = smoothing / 2
+
+	# right
+	right_idx = labels + 1
+	valid_right = right_idx < num_classes
+	smoothed[idx[valid_right], right_idx[valid_right]] = smoothing / 2
+
+	# edge correction
+	smoothed[idx[~valid_left], labels[~valid_left]] += smoothing / 2
+	smoothed[idx[~valid_right], labels[~valid_right]] += smoothing / 2
+
+	# mask impossible yards
+	mask = torch.arange(num_classes, device=device).expand(batch_size, -1) > (yardline + 30).unsqueeze(1)
+	smoothed[mask] = 0
+
+	return smoothed
+
 class FocalLoss(nn.Module):
 	def __init__(self, gamma=2.0):
 		super().__init__()
@@ -48,53 +79,41 @@ class ResBlock(nn.Module):
 		return x + self.layer(x)
 
 
-class masked_model(nn.Module):
-	def __init__(self, n_in=11, n_out=109, n_hidden=50, dropout_prob=0.):
-		super(masked_model, self).__init__()
+
+class maskedModel(nn.Module):
+	def __init__(self, n_in=11, n_out=140, n_hidden=512):
+		super(maskedModel, self).__init__()
 		self.n_out=n_out
 		self.main_layers = nn.Sequential(
 		nn.Linear(n_in, n_hidden),nn.ReLU(),
-		nn.Linear(n_hidden, n_hidden),nn.ReLU(),
-		nn.Dropout(p=dropout_prob),
-		nn.Linear(n_hidden, n_hidden),nn.ReLU(),
+		ResBlock(n_hidden),
+		ResBlock(n_hidden),
+		ResBlock(n_hidden),
+		ResBlock(n_hidden),
+		#ResBlock(n_hidden),
+		#ResBlock(n_hidden),
+		#ResBlock(n_hidden),
 		)
-		self.add_yardline = nn.Linear(n_hidden + 1, n_out)
+		self.output_layer  = nn.Linear(n_hidden, n_out)
+		self.td_head = nn.Sequential(nn.Linear(n_in, n_hidden),nn.ReLU(),
+		ResBlock(n_hidden), nn.Linear(n_hidden,1))
+		
 	def forward(self, x):
 		# Extract the feature to pass to the final layer (e.g., the first feature)
-		feature_to_pass = x[:, 0].unsqueeze(1)  # Assuming you want the first feature, shape [batch_size, 1]
-
+		yardline = x[:, 0].unsqueeze(1)  # Assuming you want the first feature, shape [batch_size, 1]
+		#td_bin = (yardline + 40).long().squeeze(1)
+		#td_logits = self.td_head(x)
 		x = self.main_layers(x)
-		x = torch.cat((x, feature_to_pass), dim=1) 
-		x = self.add_yardline(x)
-		return x
+		logits = self.output_layer(x)
+		#batch_indices = torch.arange(logits.size(0), device=logits.device)
+		#logits[batch_indices, td_bin] = logits[batch_indices, td_bin] + td_logits.squeeze(1)
+		
+		yard_values = torch.arange(-40, self.n_out - 40, device=x.device).float().unsqueeze(0)
+		mask = (yard_values <= yardline).float()
+		logits = logits + (mask - 1) * 1e9
 
+		return logits
 
-class WithDropout(nn.Module):
-    def __init__(self, n_in=11, n_out=109, n_hidden=50, dropout_prob=0.0):
-        super(WithDropout, self).__init__()
-        self.main_layers = nn.Sequential(
-            nn.Linear(n_in, n_hidden),
-            nn.ReLU(),
-            nn.Linear(n_hidden, n_hidden),
-            
-            nn.ReLU(),
-            nn.Dropout(p=dropout_prob),
-            nn.Linear(n_hidden, n_hidden),
-            nn.ReLU(),
-        )
-        self.add_yardline = nn.Linear(n_hidden + 1, n_out)
-
-    def forward(self, x):
-        # Extract the feature to pass to the final layer (e.g., the first feature)
-        feature_to_pass = x[:, 0].unsqueeze(
-            1
-        )  # Assuming you want the first feature, shape [batch_size, 1]
-
-        x = self.main_layers(x)
-        x = torch.cat((x, feature_to_pass), dim=1)
-        x = self.add_yardline(x)
-
-        return x
 
 
 def create_model(df, x_cols, y_col, colsample_bytree=0.5):
