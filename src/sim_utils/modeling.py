@@ -13,32 +13,43 @@ from sklearn.metrics import (
 )
 
 
-def adjacent_label_smoothing(labels, yardline, num_classes=130, smoothing=0.1):
+def adjacent_label_smoothing(labels, yardline, num_classes=130, smoothing=0.1, k=3, yard_shift=40):
+	"""
+	labels: [batch]
+	yardline: [batch]
+	k: number of bins to smooth on each side
+	"""
 	batch_size = labels.size(0)
 	device = labels.device
 	
 	smoothed = torch.zeros(batch_size, num_classes, device=device)
-	idx = torch.arange(batch_size, device=device)  # ensure GPU
+	idx = torch.arange(batch_size, device=device)
 
+	weight = np.array([x for x in range(k+1, 1, -1)])
+	weight = 0.5 * weight / sum(weight)
+
+	
 	# main label
 	smoothed[idx, labels] = 1.0 - smoothing
 
-	# left
-	left_idx = labels - 1
-	valid_left = left_idx >= 0
-	smoothed[idx[valid_left], left_idx[valid_left]] = smoothing / 2
+	# left and right neighbors
+	for offset, w  in zip(range(1, k+1), weight):
+		# left
+		left_idx = labels - offset
+		valid_left = left_idx >= 0
+		smoothed[idx[valid_left], left_idx[valid_left]] += w
 
-	# right
-	right_idx = labels + 1
-	valid_right = right_idx < num_classes
-	smoothed[idx[valid_right], right_idx[valid_right]] = smoothing / 2
+		# right
+		right_idx = labels + offset
+		valid_right = right_idx < num_classes
+		smoothed[idx[valid_right], right_idx[valid_right]] += w
 
-	# edge correction
-	smoothed[idx[~valid_left], labels[~valid_left]] += smoothing / 2
-	smoothed[idx[~valid_right], labels[~valid_right]] += smoothing / 2
+		# edge correction
+		smoothed[idx[~valid_left], labels[~valid_left]] += w
+		smoothed[idx[~valid_right], labels[~valid_right]] += w
 
 	# mask impossible yards
-	mask = torch.arange(num_classes, device=device).expand(batch_size, -1) > (yardline + 30).unsqueeze(1)
+	mask = torch.arange(num_classes, device=device).expand(batch_size, -1) > (yardline + yard_shift).unsqueeze(1)
 	smoothed[mask] = 0
 
 	return smoothed
@@ -111,6 +122,42 @@ class maskedModel(nn.Module):
 		yard_values = torch.arange(-40, self.n_out - 40, device=x.device).float().unsqueeze(0)
 		mask = (yard_values <= yardline).float()
 		logits = logits + (mask - 1) * 1e9
+
+		return logits
+	
+class maskedModelYac(nn.Module):
+	def __init__(self, n_in=11, n_out=140, n_hidden=512, offset=40):
+		super(maskedModelYac, self).__init__()
+		self.n_out=n_out
+		self.offset=40
+		self.main_layers = nn.Sequential(
+		nn.Linear(n_in, n_hidden),nn.ReLU(),
+		ResBlock(n_hidden),
+		ResBlock(n_hidden),
+		ResBlock(n_hidden),
+		ResBlock(n_hidden),
+		ResBlock(n_hidden),
+		ResBlock(n_hidden),
+		ResBlock(n_hidden),
+		)
+		self.output_layer  = nn.Linear(n_hidden, n_out)
+		self.td_head = nn.Sequential(ResBlock(n_hidden), nn.Linear(n_hidden,1))
+		
+	def forward(self, x):
+		logits=0 # need for weird cuda error?
+		# Extract the feature to pass to the final layer (e.g., the first feature)
+		yardline = x[:, 0].unsqueeze(1)  # Assuming you want the first feature, shape [batch_size, 1]
+		air_yards = x[:, 2].unsqueeze(1)
+		td_bin = (yardline + self.offset).long().squeeze(1)
+		x = self.main_layers(x)
+		td_logits = self.td_head(x)
+		logits = self.output_layer(x)
+		batch_indices = torch.arange(logits.size(0), device=logits.device)
+		logits[batch_indices, td_bin] = logits[batch_indices, td_bin] + td_logits.squeeze(1)
+		
+		yard_values = torch.arange(-self.offset, self.n_out - self.offset, device=x.device).float().unsqueeze(0)
+		mask = (yard_values <= (yardline - air_yards)).float()
+		logits = logits + (mask - 1) * 1e3
 
 		return logits
 

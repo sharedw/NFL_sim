@@ -1,6 +1,6 @@
 import joblib
 import torch
-from sim_utils.modeling import WithDropout, masked_model
+from sim_utils.modeling import maskedModel, maskedModelYac
 from abc import ABC, abstractmethod
 import yaml
 import numpy as np
@@ -10,15 +10,6 @@ with open("models/feature_config.yaml", "r") as file:
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = "cpu"
-
-
-air_yards_path = "models/air_yards.pt"
-AIR_YARDS_MODEL = WithDropout(n_in=28, n_out=119)
-AIR_YARDS_MODEL.load_state_dict(torch.load(air_yards_path, weights_only=True))
-
-yac_model_path = "models/yac.pt"
-YAC_MODEL = WithDropout(n_in=29, n_out=125)
-YAC_MODEL.load_state_dict(torch.load(yac_model_path, weights_only=True))
 
 CLOCK_MODEL = joblib.load("models/clock_model.joblib")
 
@@ -72,12 +63,12 @@ class ChooseRusherModel(GameModel):
 class RushYardsModel(GameModel):
     """returns yards gained"""
     def __init__(self, config):
-        super().__init__(config["choose_rusher_cols"])
+        super().__init__(config["rush_yard_cols"])
         self._load_model()
 
     def _load_model(self) -> None:
         model_path = "models/run_yards_gained.pt"
-        self.model = masked_model(n_in=7, n_hidden=256, n_out=130).to(device)
+        self.model = maskedModel(n_in=6, n_hidden=64, n_out=140).to(device)
         self.model.load_state_dict(torch.load(model_path, weights_only=True))
 
 
@@ -88,6 +79,51 @@ class RushYardsModel(GameModel):
         with torch.no_grad():
             preds = self.model(x.reshape(1, -1))[0]
             preds = torch.softmax(preds, 0)
-        sample = (torch.multinomial(preds, 1)).item() - 30
+        sample = (torch.multinomial(preds, 1)).item() - 40
         return sample
 
+class AirYardsModel(GameModel):
+    """returns yards gained"""
+    def __init__(self, config):
+        super().__init__(config["air_yard_cols"])
+        self._load_model()
+
+    def _load_model(self) -> None:
+        model_path = "models/air_yards.pt"
+        self.model = maskedModel(n_in=22, n_hidden=512, n_out=140).to(device)
+        self.model.load_state_dict(torch.load(model_path, weights_only=True))
+
+
+    def predict(self, *features: list[dict]) -> int:
+        
+        features = self._fetch_model_input(*features)
+        x = torch.tensor(features).to(device)
+        with torch.no_grad():
+            preds = self.model(x.reshape(1, -1))[0]
+            preds = torch.softmax(preds, 0)
+        sample = (torch.multinomial(preds, 1)).item() - 40
+        return sample
+    
+
+
+class YacModel(GameModel):
+    """returns yards gained"""
+    def __init__(self, config):
+        super().__init__(config["yac_cols"])
+        self._load_model()
+
+    def _load_model(self) -> None:
+        model_path = "models/yac.pt"
+        self.model = maskedModelYac(n_in=26, n_hidden=256, n_out=140).to(device)
+        self.model.load_state_dict(torch.load(model_path, weights_only=True))
+
+
+    def predict(self, *features: list[dict]) -> int:
+        
+        features = self._fetch_model_input(*features)
+        x = torch.tensor(features).to(device)
+        with torch.no_grad():
+            preds = self.model(x.reshape(1, -1))[0]
+            preds = torch.softmax(preds, 0)
+        sample = (torch.multinomial(preds, 1)).item() - 40
+        return sample

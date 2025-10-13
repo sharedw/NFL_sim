@@ -1,7 +1,7 @@
 with base as (
 select
-depth.dense_depth,depth.position, depth.gsis_id,weekly.game_id,weekly.season,
-weekly.week,player_id, player_display_name,
+depth.dense_depth,depth.position, depth.gsis_id,coalesce(weekly.player_id, depth.gsis_id) as player_id, depth.game_id,depth.season,
+depth.week, depth.player_name,coalesce(weekly.player_display_name, depth.player_name) as player_display_name,
 completions, attempts,
        passing_yards, passing_tds, passing_interceptions, sacks_suffered, sack_yards_lost,
        sack_fumbles, sack_fumbles_lost, passing_air_yards,
@@ -14,7 +14,7 @@ completions, attempts,
        receiving_yards_after_catch, receiving_first_downs, receiving_epa,
        receiving_2pt_conversions, racr, target_share, air_yards_share,
        wopr, special_teams_tds, fantasy_points, fantasy_points_ppr
-from weekly left join depth
+from weekly full join depth
 on weekly.game_id = depth.game_id
 and weekly.player_id = depth.gsis_id
 where depth.formation = 'Offense'
@@ -26,9 +26,8 @@ snaps.game_id, snaps.team, snaps.opponent, snaps.offense_snaps, snaps.offense_pc
 join snaps on ids.pfr_id = snaps.pfr_player_id
 )
 select * 
-from base join snps using(gsis_id, game_id)
-where offense_pct > 0
---where player_display_name ilike '%De%v%on Achane'
+from base left join snps using(gsis_id, game_id)
+--where game_id = '2024_04_TEN_MIA'
+--and position = 'QB'
 order by base.season,base.week
---limit 3
 ;
