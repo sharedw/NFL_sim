@@ -7,19 +7,23 @@ import torch
 import warnings
 from utils.quack import Quack
 import yaml
-from sim_utils.sim_models import ChooseRusherModel, RushYardsModel, AirYardsModel, YacModel
+from sim_utils.sim_models import (
+	ChooseRusherModel,
+	RushYardsModel,
+	AirYardsModel,
+	YacModel,
+)
 from time import time
 
 with open("models/feature_config.yaml", "r") as file:
 	CONFIG = yaml.safe_load(file)
 
-team_rb_stats = Quack.fetch_table('team_rushers')
-team_qb_stats = Quack.fetch_table('team_qb_stats')
-team_receiver_stats = Quack.fetch_table('team_receiver_stats')
-team_stats = Quack.fetch_table('team_feats')
-opp_stats = Quack.fetch_table('opp_feats')
-players = Quack.fetch_table('player_weekly_agg')
-
+team_rb_stats = Quack.fetch_table("team_rushers")
+team_qb_stats = Quack.fetch_table("team_qb_stats")
+team_receiver_stats = Quack.fetch_table("team_receiver_stats")
+team_stats = Quack.fetch_table("team_feats")
+opp_stats = Quack.fetch_table("opp_feats")
+players = Quack.fetch_table("player_weekly_agg")
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -31,7 +35,7 @@ YAC_MODEL = YacModel(CONFIG)
 
 CLOCK_MODEL = joblib.load("models/clock_model.joblib")
 
-#CHOOSE_RUSHER_MODEL = joblib.load("models/choose_rusher.joblib")
+# CHOOSE_RUSHER_MODEL = joblib.load("models/choose_rusher.joblib")
 CHOOSE_RUSHER_MODEL = ChooseRusherModel(CONFIG)
 
 CHOOSE_RECEIVER_MODEL = joblib.load("models/choose_receiver.joblib")
@@ -39,7 +43,7 @@ CHOOSE_RECEIVER_MODEL = joblib.load("models/choose_receiver.joblib")
 COMPLETE_PASS_MODEL = joblib.load("models/complete_pass.joblib")
 
 
-#QRF_RUN_YARDS = joblib.load("models/rush_yards_qrf.joblib")
+# QRF_RUN_YARDS = joblib.load("models/rush_yards_qrf.joblib")
 
 stat_cols = [
 	"completions",
@@ -91,9 +95,10 @@ def fetch_row_or_latest(df, team, season, week):
 		df = df.loc[(df.team == team) & (df.season == season)]
 		row = df.loc[(df.week == min(df.week.max(), week))].to_dict(orient="records")[0]
 	except Exception as e:
-		print(f'No data exists for {team} in {season}')
+		print(f"No data exists for {team} in {season}")
 		raise e
 	return row
+
 
 class Player:
 	def __init__(self, d):
@@ -107,7 +112,6 @@ class Player:
 
 	def reset_stats(self):
 		self.stats = {stat_name: 0 for stat_name in self.stats}
-
 
 	def __getattr__(self, name):
 		# Redirect attribute access to the stats dictionary
@@ -201,12 +205,10 @@ class Team:
 		self.features = {"last_rusher_drive": -1, "last_rusher_team": -1}
 		self.team_stats = fetch_row_or_latest(team_stats, self.name, season, week)
 		self.opp_stats = fetch_row_or_latest(opp_stats, self.name, season, week)
-		self.roster = players.loc[
-			(players.team == name) & (players.season == season)
-		]
+		self.roster = players.loc[(players.team == name) & (players.season == season)]
 		self.roster = self.roster.loc[
 			(self.roster.week == min(self.roster.week.max(), week))
-			#& (self.roster.formation == "Offense")
+			# & (self.roster.formation == "Offense")
 			& (self.roster.position.isin(["QB", "WR", "TE", "RB", "K"]))
 		].sort_values(by="dense_depth")
 
@@ -220,9 +222,7 @@ class Team:
 		self.team_receiver_stats = fetch_row_or_latest(
 			team_receiver_stats, self.name, season, week
 		)
-		self.team_qb_stats = fetch_row_or_latest(
-			team_qb_stats, self.name, season, week
-		)
+		self.team_qb_stats = fetch_row_or_latest(team_qb_stats, self.name, season, week)
 
 	def get_players_by_position(self, position: str):
 		"""Filter players by position and create player objects."""
@@ -264,18 +264,18 @@ class Team:
 			depth -= 1
 		print(pos, depth, self.name, "You want a player that does not exist")
 		if pos == "WR":
-				return self.WRs[0]
+			return self.WRs[0]
 		if pos == "RB":
-				return self.RBs[0]
+			return self.RBs[0]
 		if pos == "TE":
-				return self.TEs[0]
+			return self.TEs[0]
 		if pos == "QB":
-				return self.QBs[0]
+			return self.QBs[0]
 		raise ValueError("You want a player that does not exist")
 
 	def game_results(self, game_id, df=False):
 		r = [
-			{"team": self.name, "position": x.position, "id": x.id, "sim_id":game_id}
+			{"team": self.name, "position": x.position, "id": x.id, "sim_id": game_id}
 			| x.stats_to_dict()
 			for x in self.players
 		]
@@ -290,65 +290,61 @@ class Team:
 
 	def __repr__(self):
 		return f"{self.name} has {self.score} points"
-	
+
 
 class Play(ABC):
 	def __init__(self, game):
 		self.game = game
 		self.clock_cols = CONFIG["clock_cols"]
 		self.play_context = {}
-		self.play_data = {'incomplete_pass':0,
-						  'out_of_bounds':0,
-					  'player':None,
-					  'timeout': 0,
-					  'sp': 0}
+		self.play_data = {
+			"incomplete_pass": 0,
+			"out_of_bounds": 0,
+			"player": None,
+			"timeout": 0,
+			"sp": 0,
+		}
 
 	@abstractmethod
 	def execute_play(self, team):
 		return
-	
+
 	def log_play(self, play_type, yds, play_time_elapsed=0, verbose=False):
 		"""Logs the context of the game state at each play."""
 		play_data = {
 			"play_type": play_type,
 			"yards_gained": yds,
-			"player": self.play_data['player'],
+			"player": self.play_data["player"],
 			"play_time_elapsed": play_time_elapsed,
 		}
 		play_data.update(self.game.game_context)
 		if verbose:
 			print(
-				f'{self.game.possession.name} {play_type} for {yds} yards, {self.game.pbp[-1]['yardline_100']} yd line,'
-				+ f' {self.game.pbp[-1]['ydstogo']} yds to go on {self.game.pbp[-1]['down']} down.'
-				+ f' {self.game.pbp[-1]['quarter_seconds_remaining'] // 60}:{self.game.pbp[-1]['quarter_seconds_remaining']  % 60} left'
+				f"{self.game.possession.name} {play_type} for {yds} yards, {self.game.pbp[-1]['yardline_100']} yd line,"
+				+ f" {self.game.pbp[-1]['ydstogo']} yds to go on {self.game.pbp[-1]['down']} down."
+				+ f" {self.game.pbp[-1]['quarter_seconds_remaining'] // 60}:{self.game.pbp[-1]['quarter_seconds_remaining'] % 60} left"
 			)
 		self.game.pbp.append(play_data)
 		return play_data
 
-	
 	def sample_clock(self, play_type):
 		"""this is the time from the previous play, until the next play starts."""
 		raw_features = self.collect_features(
 			{"next_play": self.game.int_from_play[play_type]},
-			 self.game.pbp[-1],
-			self.play_data
+			self.game.pbp[-1],
+			self.play_data,
 		)
-		raw_features['play_type_enc'] = self.game.int_from_play[self.game.pbp[-1]['play_type']]
+		raw_features["play_type_enc"] = self.game.int_from_play[
+			self.game.pbp[-1]["play_type"]
+		]
 		features = np.array([[raw_features[key] for key in self.clock_cols]])
-		t = CLOCK_MODEL.predict(features).item()+5
+		t = CLOCK_MODEL.predict(features).item() + 5
 		return t
 
-
-	def update_game_state(self, team, yards):
-		if self.play_type not in ["field_goal", "punt", "pos_timeout", "def_timeout"]:
-			self.game.ydstogo -= yards
-			self.game.ball_position -= yards
-			self.game.td_check(team)
-			self.game.check_downs(team)
-	
-	def orchestrate(self, team):
+	def orchestrate(self, team :Team) -> dict:
 		yards = self.execute_play(team)
 		self.update_game_state(team, yards)
+		return self.play_data
 
 	def collect_features(self, *argv):
 		features = {}
@@ -361,7 +357,7 @@ class Play(ABC):
 class RunPlay(Play):
 	def __init__(self, game):
 		super().__init__(game)
-		self.play_type='run'
+		self.play_type = "run"
 		self.rusher_idx_to_pos = CONFIG["rusher_idx_to_pos"]
 		self.rush_yard_cols = CONFIG["rush_yard_cols"]
 
@@ -394,11 +390,11 @@ class RunPlay(Play):
 		return yds
 
 	def update_game_state(self, team, yds):
-			#super().update_game_state()
-			self.player.carries += 1
-			self.player.rushing_yards += yds
-			self.game.player = self.player.name
-			return
+		# super().update_game_state()
+		self.player.carries += 1
+		self.player.rushing_yards += yds
+		self.game.player = self.player.name
+		return
 
 	def sample_run_yards_quant(self, model, team, player):
 		raw_features = self.collect_features(
@@ -410,22 +406,20 @@ class RunPlay(Play):
 		x = np.array([x])
 		with warnings.catch_warnings():
 			warnings.filterwarnings("ignore", category=UserWarning)
-			quantile = np.random.randint(0,100)/100
+			quantile = np.random.randint(0, 100) / 100
 			sample = model.predict(x, quantiles=quantile)
 		return round(sample[0])
-	
+
 
 class PassPlay(Play):
 	def __init__(self, game):
 		super().__init__(game)
-		self.play_type='pass'
+		self.play_type = "pass"
 
 		self.choose_receiver_cols = CONFIG["choose_receiver_cols"]
 		self.air_yards_cols = CONFIG["air_yards_cols"]
 		self.receiver_idx_to_pos = CONFIG["receiver_idx_to_pos"]
 		self.complete_pass_cols = CONFIG["complete_pass_cols"]
-		
-
 
 	def sample_air_and_yac(self, team, player):
 		raw_features = self.collect_features(
@@ -436,15 +430,14 @@ class PassPlay(Play):
 		air_yards = AIR_YARDS_MODEL.predict(raw_features)
 		if air_yards >= self.game.ball_position:  # touchdown at catch
 			return self.game.ball_position, 0
-		
-		raw_features['air_yards'] = air_yards
-		raw_features['catch_yardline'] = self.game.ball_position - air_yards
-		raw_features['air_td'] = air_yards >= self.game.ball_position
-		raw_features['air_fd'] = air_yards >= self.game.ydstogo
+
+		raw_features["air_yards"] = air_yards
+		raw_features["catch_yardline"] = self.game.ball_position - air_yards
+		raw_features["air_td"] = air_yards >= self.game.ball_position
+		raw_features["air_fd"] = air_yards >= self.game.ydstogo
 		yac = YAC_MODEL.predict(raw_features)
 		yac = min(yac, (self.game.ball_position - air_yards))
-		self.play_context.update({'air_yards':air_yards,
-						  'yac': yac})
+		self.play_context.update({"air_yards": air_yards, "yac": yac})
 		return air_yards, yac
 
 	def sample_completion(self, qb, receiver, team, air_yards):
@@ -460,7 +453,7 @@ class PassPlay(Play):
 		preds = COMPLETE_PASS_MODEL.predict_proba([features])
 		receiver = np.random.choice(len(preds[0]), p=preds[0])
 		return np.random.choice(len(preds[0]), p=preds[0])
-	
+
 	def get_receiver(self, team):
 		raw_features = self.collect_features(
 			team.team_receiver_stats,
@@ -478,9 +471,7 @@ class PassPlay(Play):
 		receiver = self.get_receiver(team)
 		passer.attempts += 1
 		receiver.targets += 1
-		air_yards, yac = self.sample_air_and_yac(
-			team, receiver
-		)
+		air_yards, yac = self.sample_air_and_yac(team, receiver)
 
 		if self.sample_completion(passer, receiver, team, air_yards):
 			passer.completions += 1
@@ -492,14 +483,14 @@ class PassPlay(Play):
 			passer.passing_yards += yds
 		else:
 			yds = 0
-		self.play_data['player'] = receiver.name
+		self.play_data["player"] = receiver.name
 		return yds
 
 
 class FieldGoal(Play):
 	def __init__(self, game):
 		super().__init__(game)
-		self.play_type='field_goal'
+		self.play_type = "field_goal"
 
 	def execute_play(self, team):
 		result = random.randint(0, 100)
@@ -518,11 +509,11 @@ class FieldGoal(Play):
 class Punt(Play):
 	def __init__(self, game):
 		super().__init__(game)
-		self.play_type='punt'
+		self.play_type = "punt"
 
 	def execute_play(self, team):
 		return 0
-	
+
 	def update_game_state(self, team, yards):
 		self.game.switch_poss()
 		self.game.ball_position += random.randint(45, 60)
@@ -531,10 +522,12 @@ class Punt(Play):
 		self.game.player = None
 		return 0
 
+
 class Kneel(Play):
 	def __init__(self, game):
 		super().__init__(game)
-		self.play_type='qb_kneel'
+		self.play_type = "qb_kneel"
+
 	def execute_play(self, team):
 		# Implementation of qb kneel play
 		# print("QB kneel executed.")
@@ -544,7 +537,7 @@ class Kneel(Play):
 class Spike(Play):
 	def __init__(self, game):
 		super().__init__(game)
-		self.play_type='qb_spike'
+		self.play_type = "qb_spike"
 
 	def execute_play(self, team):
 		# Implementation of qb spike play
@@ -555,21 +548,24 @@ class Spike(Play):
 class PosTimeout(Play):
 	def __init__(self, game):
 		super().__init__(game)
-		self.play_type='pos_timeout'
+		self.play_type = "pos_timeout"
+
 	def execute_play(self, team):
 		self.game.possession.timeouts -= 1
-		#print(f"TIMEOUT! {self.game.possession.timeouts} remaining")
+		# print(f"TIMEOUT! {self.game.possession.timeouts} remaining")
 		return 0
 
 
 class DefTimeout(Play):
 	def __init__(self, game):
 		super().__init__(game)
-		self.play_type='def_timeout'
+		self.play_type = "def_timeout"
+
 	def execute_play(self, team):
 		self.game.defending.timeouts -= 1
-		#print(f"def TIMEOUT!, {self.game.defending.timeouts} remaining")
+		# print(f"def TIMEOUT!, {self.game.defending.timeouts} remaining")
 		return 0
+
 
 class GameState:
 	def __init__(self, away, home, **kwargs):
@@ -601,7 +597,7 @@ class GameState:
 		self.reset_game()
 		self.game_context = self.get_game_state()
 
-	def reset_game(self)-> None: 
+	def reset_game(self) -> None:
 		"""Reset values to starting. Used when initializing GameState, and between consecutive sims"""
 		self.quarter = 1
 		self.possession = self.home
@@ -615,11 +611,12 @@ class GameState:
 		self.player = None
 		self.home.timeouts = 3
 		self.away.timeouts = 3
-		self.game_id = int(time() * 1000) 
+		self.game_id = int(time() * 1000)
 		self.home.reset_stats()
 		self.away.reset_stats()
 
-	def switch_poss(self):
+	def switch_poss(self) -> None:
+		"""Resets drive specific values to initial, and changes possession"""
 		self.possession.features["last_rusher_drive"] = -1
 		self.possession = self.away if self.possession == self.home else self.home
 		self.defending = self.possession.opponent
@@ -629,13 +626,15 @@ class GameState:
 		self.drive += 1
 		return
 
-	def kickoff(self):
+	def kickoff(self) -> None:
+		"""Used to set possession and field position after other team scores."""
 		self.switch_poss()
 		self.ball_position = 65
 		self.log_play("kickoff", 0)
 		pass
 
-	def start_game(self):
+	def start_game(self) -> None:
+		"""Used to run initial kickoff for a new game."""  # TODO: Merge with reset_game?
 		self.lost_kickoff = random.choice((self.home, self.away))
 		self.possession = self.lost_kickoff
 		self.kickoff()
@@ -643,15 +642,16 @@ class GameState:
 		# print(f"{self.possession.name} has won the kickoff")
 		self.log_play("kickoff", 0)
 
-	def collect_features(self, *argv):
+	def collect_features(self, *argv: dict) -> dict:
+		"""Helper function that merges values from a"""
 		features = {}
 		features.update(self.game_context)
 		for arg in argv:
 			features.update(arg)
 		return features
 
-	def get_game_state(self):
-		"""Logs the context of the game state at each play."""
+	def get_game_state(self) -> None:
+		"""Logs the context of the game state at each play. This needs to match naming of model inputs."""
 		play_data = {
 			"possession": self.possession.name,
 			"quarter": self.quarter,
@@ -677,10 +677,17 @@ class GameState:
 			"defteam_timeouts_remaining": self.defending.timeouts,
 		}
 		return play_data
+	
+	def update_game_state(self, team: Team, yards: int):
+		if self.play_type not in ["field_goal", "punt", "pos_timeout", "def_timeout"]:
+			self.game.ydstogo -= yards
+			self.game.ball_position -= yards
+			self.game.td_check(team)
+			self.game.check_downs(team)
 
-	def play(self, team):
+	def choose_play_type(self, team: Team) -> str:
+		"""Samples a play type based on game context."""
 		self.game_context = self.get_game_state()
-		team.plays += 1
 		raw_features = self.collect_features(
 			team.team_stats,
 			self.defending.opp_stats,
@@ -695,18 +702,29 @@ class GameState:
 			preds /= preds.sum()
 		play_type_int = np.random.choice(len(preds[0]), p=preds[0])
 		play_type = self.play_encoding.get(play_type_int, 1)
-		#play_time_elapsed = self.play_functions[play_type].sample_clock(play_type)
-		#self.clock -= play_time_elapsed
-		yds = self.play_functions[play_type].orchestrate(team)
-		#self.log_play(play_type, yds, play_time_elapsed) ########TODO
+		return play_type
 
-	def log_play(self, play_type, yds,play_time_elapsed, verbose=False):
-		"""Logs the context of the game state at each play."""
+	def sim_one_play(self, team: Team) -> None:
+		"""Simulate one play of the game.
+		1. Choose play type
+		2. Sim play time elapsed
+		3. Get play result
+		4. log play results.""" #TODO: Make play logging happen elsewhere
+
+		play_type = self.choose_play_type(team)
+		team.plays += 1
+		play_time_elapsed = self.play_functions[play_type].sample_clock(play_type)
+		self.clock -= play_time_elapsed
+		play_context = self.play_functions[play_type].orchestrate(team)
+		self.log_play(play_type, yds, play_time_elapsed)
+
+	def log_play(self, play_type, yds, play_time_elapsed, verbose=False):
+		"""Logs the result of a simulated play"""
 		play_data = {
 			"play_type": play_type,
 			"yards_gained": yds,
 			"player": self.player,
-			"play_time_elapsed": play_time_elapsed
+			"play_time_elapsed": play_time_elapsed,
 		}
 		play_data.update(self.game_context)
 		if verbose:
@@ -718,7 +736,8 @@ class GameState:
 		self.pbp.append(play_data)
 		return play_data
 
-	def td_check(self, team):
+	def td_check(self, team: Team) -> None:
+		"""Checks if previous play was a touchdown or not. If it was, kickoff to other team."""
 		if self.ball_position <= 0:
 			team.score += 7
 			self.pbp[-1]
@@ -726,7 +745,8 @@ class GameState:
 			# print(f'{team.name} scored a TD')
 		return
 
-	def check_downs(self, team):
+	def check_downs(self, team: Team) -> None:
+		"""Check if play earned a first down or not. Switch possession if 4th down fails."""
 		if self.ydstogo <= 0:
 			self.ydstogo = 10
 			self.down = 1
@@ -735,7 +755,8 @@ class GameState:
 		else:
 			self.down += 1
 
-	def play_quarter(self):
+	def play_quarter(self) -> None:
+		"""Sims plays until the time runs out for the quarter"""
 		self.clock = 900
 		if self.quarter == 3:
 			self.kickoff()
@@ -744,12 +765,13 @@ class GameState:
 			self.home.timeouts = 3
 			self.away.timeouts = 3
 		while self.clock > 0:
-			self.play(self.possession)
+			self.sim_one_play(self.possession)
 		self.quarter += 1
 		# print(f"{self.home.name}:{self.home.score}")
 		# print(f"{self.away.name}:{self.away.score}")
 
-	def play_game(self):
+	def play_game(self) -> None:
+		"""Simulate one NFL game from start to finish."""
 		self.reset_game()
 		self.start_game()
 		while self.quarter <= 4:
@@ -761,8 +783,8 @@ class GameState:
 			print(f"{self.away.name} has won {self.away.score} - {self.home.score}")
 
 	def game_results(self, df=False):
-		res1 = self.home.game_results(self.game_id,df=False)
-		res2 = self.away.game_results(self.game_id,df=False)
+		res1 = self.home.game_results(self.game_id, df=False)
+		res2 = self.away.game_results(self.game_id, df=False)
 		res = res1 + res2
 		if df:
 			return pd.DataFrame(res)

@@ -75,8 +75,7 @@ class RushYardsModel(GameModel):
     def predict(self, *features: list[dict]) -> int:
         
         features = self._fetch_model_input(*features)
-        print(features)
-        x = torch.tensor(features).float().to(device)
+        x = torch.tensor(features).to(device)
         with torch.no_grad():
             preds = self.model(x.reshape(1, -1))[0]
             preds = torch.softmax(preds, 0)
@@ -128,3 +127,8 @@ class YacModel(GameModel):
             preds = torch.softmax(preds, 0)
         sample = (torch.multinomial(preds, 1)).item() - 40
         return sample
+
+class ModelRegistry:
+    _models = {
+        'YAC_MODEL':
+    }

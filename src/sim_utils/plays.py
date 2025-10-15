@@ -1,0 +1,314 @@
+from abc import ABC, abstractmethod
+import numpy as np
+import warnings
+import joblib
+from sim_utils.config import CONFIG
+from sim_utils.sim_models import ChooseRusherModel, RushYardsModel, AirYardsModel, YacModel
+from sim_utils.team import Team
+
+RUSH_YARDS_MODEL = RushYardsModel(CONFIG)
+AIR_YARDS_MODEL = AirYardsModel(CONFIG)
+YAC_MODEL = YacModel(CONFIG)
+
+CLOCK_MODEL = joblib.load("models/clock_model.joblib")
+
+#CHOOSE_RUSHER_MODEL = joblib.load("models/choose_rusher.joblib")
+CHOOSE_RUSHER_MODEL = ChooseRusherModel(CONFIG)
+
+CHOOSE_RECEIVER_MODEL = joblib.load("models/choose_receiver.joblib")
+
+COMPLETE_PASS_MODEL = joblib.load("models/complete_pass.joblib")
+
+class Play(ABC):
+	def __init__(self):
+		self.clock_cols = CONFIG["clock_cols"]  #TODO: doesn't belong here tbh
+		self.play_context = {}
+		self.play_type = None
+		self.play_data = {'incomplete_pass':0,
+						  'out_of_bounds':0,
+					  'player':None,
+					  'timeout': 0,
+					  'sp': 0}
+
+	@abstractmethod
+	def execute_play(self, team: Team, game_context: dict):
+		return
+	'''
+	def log_play(self, play_type, yds, play_time_elapsed=0, verbose=False):  # TODO: Make this use the play_context and play_data stored above
+		"""Logs the context of the game state at each play."""
+		play_data = {
+			"play_type": play_type,
+			"yards_gained": yds,
+			"player": self.play_data['player'],
+			"play_time_elapsed": play_time_elapsed,
+		}
+		play_data.update(self.game.game_context)
+		if verbose:
+			print(
+				f'{self.game.possession.name} {play_type} for {yds} yards, {self.game.pbp[-1]['yardline_100']} yd line,'
+				+ f' {self.game.pbp[-1]['ydstogo']} yds to go on {self.game.pbp[-1]['down']} down.'
+				+ f' {self.game.pbp[-1]['quarter_seconds_remaining'] // 60}:{self.game.pbp[-1]['quarter_seconds_remaining']  % 60} left'
+			)
+		self.game.pbp.append(play_data)
+		return play_data
+
+	
+	def sample_clock(self, play_type):
+		"""this is the time from the previous play, until the next play starts."""
+		raw_features = self.collect_features(
+			{"next_play": self.game.int_from_play[play_type]},
+			 self.game.pbp[-1],
+			self.play_data
+		)
+		raw_features['play_type_enc'] = self.game.int_from_play[self.game.pbp[-1]['play_type']]
+		features = np.array([[raw_features[key] for key in self.clock_cols]])
+		t = CLOCK_MODEL.predict(features).item()+5 #TODO: Remove hack here
+		return
+'''
+	def sample_clock(self, play_type):
+		return 25
+	
+
+	
+	def orchestrate(self, team: Team, game_context: dict):
+		play_result = self.execute_play( team, game_context)
+		play_result['play_type'] = self.play_type
+		return play_result
+
+	def collect_features(self, *argv):
+		#TODO pass game context features directly
+		features = {}
+		for arg in argv:
+			features.update(arg)
+		return features
+
+
+class RunPlay(Play):
+	def __init__(self):
+		super().__init__()
+		self.play_type='run'
+		self.rusher_idx_to_pos = CONFIG["rusher_idx_to_pos"]
+		self.rush_yard_cols = CONFIG["rush_yard_cols"]
+
+	def choose_rusher(self, team, game_context):
+		raw_features = self.collect_features(
+			team.rb_stats,
+			team.features,
+			team.opponent.opp_stats,
+			game_context
+		)
+		rusher_idx = CHOOSE_RUSHER_MODEL.predict(raw_features)
+		pos, depth = self.rusher_idx_to_pos[rusher_idx].split("_")
+		player = team.get_depth_pos(pos, int(depth))
+		team.features["last_rusher_team"] = rusher_idx
+		team.features["last_rusher_drive"] = rusher_idx
+		return player
+
+	def sample_run_yards(self, team, game_context, player):
+		raw_features = self.collect_features(
+			player.features,
+			team.team_stats,
+			team.opponent.opp_stats,
+			game_context
+		)
+		sample = RUSH_YARDS_MODEL.predict(raw_features)
+		return min((sample, raw_features["yardline_100"]))
+
+	def execute_play(self, team: Team,game_context: dict):
+		player = self.choose_rusher(team, game_context)
+		yds = self.sample_run_yards(team, game_context, player)
+		yds = min(yds, game_context['yardline_100']) #TODO put this in game_context
+		return {'yards':yds}
+
+	def update_game_state(self, team, yds):
+			#super().update_game_state()
+			self.player.carries += 1
+			self.player.rushing_yards += yds
+			self.game.player = self.player.name
+			return
+
+	def sample_run_yards_quant(self, model, team, player, game_context):
+		raw_features = self.collect_features(
+			player.features,
+			team.team_stats,
+			team.opponent.opp_stats,
+			game_context
+		)
+		x = [raw_features[key] for key in self.rush_yard_cols]
+		x = np.array([x])
+		with warnings.catch_warnings():
+			warnings.filterwarnings("ignore", category=UserWarning)
+			quantile = np.random.randint(0,100)/100
+			sample = model.predict(x, quantiles=quantile)
+		return round(sample[0])
+	
+
+class PassPlay(Play):
+	def __init__(self):
+		super().__init__()
+		self.play_type='pass'
+
+		self.choose_receiver_cols = CONFIG["choose_receiver_cols"]
+		self.air_yards_cols = CONFIG["air_yards_cols"]
+		self.receiver_idx_to_pos = CONFIG["receiver_idx_to_pos"]
+		self.complete_pass_cols = CONFIG["complete_pass_cols"]
+		
+
+
+	def sample_air_and_yac(self, team, player, game_context):
+		raw_features = self.collect_features(
+			player.features,
+			team.team_stats,
+			team.opponent.opp_stats,
+			game_context
+		)
+		air_yards = AIR_YARDS_MODEL.predict(raw_features)
+		if air_yards >= game_context['yardline_100']:  # touchdown at catch
+			return game_context['yardline_100'], 0
+		
+		raw_features['air_yards'] = air_yards
+		raw_features['catch_yardline'] = game_context['yardline_100']- air_yards
+		raw_features['air_td'] = air_yards >= game_context['yardline_100']
+		raw_features['air_fd'] = air_yards >= game_context['ydstogo']
+		yac = YAC_MODEL.predict(raw_features)
+		yac = min(yac, (game_context['yardline_100'] - air_yards))
+		self.play_context.update({'air_yards':air_yards,
+						  'yac': yac})
+		return air_yards, yac
+
+	def sample_completion(self, qb, receiver, team, air_yards, game_context):
+		raw_features = self.collect_features(
+			receiver.features,
+			team.team_stats,
+			team.opponent.opp_stats,
+			game_context
+		)
+		raw_features["air_yards"] = air_yards
+		qb_features = {(key + "_qb"): value for key, value in qb.features.items()}
+		raw_features.update(qb_features)
+		features = [raw_features[key] for key in self.complete_pass_cols]
+		preds = COMPLETE_PASS_MODEL.predict_proba([features])
+		receiver = np.random.choice(len(preds[0]), p=preds[0])
+		return np.random.choice(len(preds[0]), p=preds[0])
+	
+	def get_receiver(self, team: Team, game_context: dict):
+		raw_features = self.collect_features(
+			team.team_receiver_stats,
+			team.features,
+			game_context
+		)
+		features = [raw_features[key] for key in self.choose_receiver_cols]
+		preds = CHOOSE_RECEIVER_MODEL.predict_proba([features])
+		receiver = np.random.choice(len(preds[0]), p=preds[0])
+		pos, depth = self.receiver_idx_to_pos[receiver].split("_")
+		receiver = team.get_depth_pos(pos, int(depth))
+		return receiver
+
+	def execute_play(self, team: Team, game_context: dict) -> dict:
+		passer = team.QBs[0]
+		receiver = self.get_receiver(team, game_context)
+		passer.attempts += 1
+		receiver.targets += 1
+		air_yards, yac = self.sample_air_and_yac(
+			team, receiver, game_context
+		)
+
+		if self.sample_completion(passer, receiver, team, air_yards, game_context):
+			passer.completions += 1
+			receiver.receptions += 1
+			yds = air_yards + yac
+			receiver.air_yards += air_yards
+			receiver.yac += yac
+			receiver.receiving_yards += yds
+			passer.passing_yards += yds
+		else:
+			yds = 0
+		self.play_data['player'] = receiver.name
+		return {'yards':yds, 'air_yards':air_yards, 'yac':yac}
+
+
+class FieldGoal(Play):
+	def __init__(self ):
+		super().__init__()
+		self.play_type='field_goal'
+
+	def execute_play(self, team: Team, game_context: dict):
+		result = np.random.randint(0, 100)
+		if result > (10 + (1.7 * game_context['yardline_100'])):
+			team.score += 3
+			self.game.switch_poss()
+			self.game.ball_position = 65
+			# print(f'{team.name} scored a FG')
+		else:
+			# print(f'{team.name} missed FG')
+			self.game.switch_poss()
+		self.game.player = None
+		return {'yards':0}
+
+
+class Punt(Play):
+	def __init__(self):
+		super().__init__()
+		self.play_type='punt'
+
+	def execute_play(self, team: Team, game_context: dict):
+		return {'yards':0}
+	
+	def update_game_state(self, team, yards):
+		self.game.switch_poss()
+		self.game.ball_position += np.random.randint(45, 60)
+		if self.game.ball_position >= 100:
+			self.game.ball_position = 20
+		self.game.player = None
+		return {'yards':0}
+
+class Kneel(Play):
+	def __init__(self):
+		super().__init__()
+		self.play_type='qb_kneel'
+	def execute_play(self, team: Team, game_context: dict):
+		# Implementation of qb kneel play
+		# print("QB kneel executed.")
+		return {'yards':0}
+
+
+class Spike(Play):
+	def __init__(self):
+		super().__init__()
+		self.play_type='qb_spike'
+
+	def execute_play(self, team: Team, game_context: dict):
+		# Implementation of qb spike play
+		# print("QB spike executed.")
+		return {'yards':-1}
+
+
+class PosTimeout(Play):
+	def __init__(self):
+		super().__init__()
+		self.play_type='pos_timeout'
+	def execute_play(self, team: Team, game_context: dict):
+		self.game.possession.timeouts -= 1
+		#print(f"TIMEOUT! {self.game.possession.timeouts} remaining")
+		return {'yards':0}
+
+
+class DefTimeout(Play):
+	def __init__(self):
+		super().__init__()
+		self.play_type='def_timeout'
+	def execute_play(self, team: Team, game_context: dict):
+		self.game.defending.timeouts -= 1
+		#print(f"def TIMEOUT!, {self.game.defending.timeouts} remaining")
+		return {'yards':0}
+
+play_registry = {
+    "run": RunPlay,
+    "pass": PassPlay,
+    "field_goal": FieldGoal,
+    "punt": Punt,
+    "qb_kneel": Kneel,
+    "qb_spike": Spike,
+    "pos_timeout": PosTimeout,
+    "def_timeout": DefTimeout,
+}
