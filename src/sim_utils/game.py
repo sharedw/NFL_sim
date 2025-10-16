@@ -126,12 +126,57 @@ class GameState:
 	
 	def update_game_state(self, team: Team,  play_result: dict):
 		#TODO Move this to the gamestate class
-		if play_result['play_type'] not in ["field_goal", "punt", "pos_timeout", "def_timeout"]:
+		self.clock -= 25
+		if play_result['play_type'] in ['run','pass']:
 			yards = play_result['yards']
 			self.ydstogo -= yards
 			self.ball_position -= yards
 			self.td_check(team)
 			self.check_downs(team)
+			return
+
+		elif play_result['play_type'] == 'qb_kneel':
+			yards = random.randint(1,2)
+			self.ydstogo -= yards
+			self.ball_position -= yards
+			self.check_downs(team)
+			return
+
+		elif play_result['play_type'] == 'qb_spike':
+			self.check_downs(team)
+			return
+		
+		elif play_result['play_type'] == 'field_goal':
+			result = np.random.randint(0, 100)
+			if result > (10 + (1.7 * self.ball_position)):
+				team.score += 3
+				self.switch_poss()
+				self.ball_position = 65
+			else:
+				self.switch_poss()
+			self.player = None
+			return
+		
+		elif play_result['play_type'] == 'punt':
+			self.switch_poss()
+			self.ball_position += np.random.randint(45, 60)
+			if self.ball_position >= 100:
+				self.ball_position = 20
+			self.player = None
+			return 
+
+		elif play_result['play_type'] == 'pos_timeout':
+			self.possession.timeouts -= 1
+			return
+		
+		elif play_result['play_type'] == 'def_timeout':
+			self.defending.timeouts -= 1
+			return
+		
+		elif play_result['play_type'] == 'kickoff':
+			return
+		
+		return
 
 	def sim_one_play(self, team: Team) -> None:
 		"""This is the core functionality of the sim. This simulates one play of a given type.

@@ -24,6 +24,8 @@ stat_cols = [
 	"passing_first_downs",
 	"passing_epa",
 	"passing_2pt_conversions",
+	"passing_yac",
+	"passing_air_yards",
 	"pacr",
 	"carries",
 	"rushing_yards",
@@ -54,9 +56,10 @@ stat_cols = [
 ]
 
 
-def fetch_row_or_latest(df, team, season, week):
+def fetch_row_or_latest(df, team, season, week, opp=False):
+	team_field = 'team' if not opp else 'opponent_team'
 	try:
-		df = df.loc[(df.team == team) & (df.season == season)]
+		df = df.loc[(df[team_field] == team) & (df.season == season)]
 		row = df.loc[(df.week == min(df.week.max(), week))].to_dict(orient="records")[0]
 	except Exception as e:
 		print(f'No data exists for {team} in {season}')
@@ -169,7 +172,7 @@ class Team:
 		self.plays = 0
 		self.features = {"last_rusher_drive": -1, "last_rusher_team": -1}
 		self.team_stats = fetch_row_or_latest(team_stats, self.name, season, week)
-		self.opp_stats = fetch_row_or_latest(opp_stats, self.name, season, week)
+		self.opp_stats = fetch_row_or_latest(opp_stats, self.name, season, week, opp=True)
 		self.roster = players.loc[
 			(players.team == name) & (players.season == season)
 		]
@@ -179,10 +182,10 @@ class Team:
 			& (self.roster.position.isin(["QB", "WR", "TE", "RB", "K"]))
 		].sort_values(by="dense_depth")
 
-		self.QBs = self.get_players_by_position("QB")
-		self.RBs = self.get_players_by_position("RB")
-		self.WRs = self.get_players_by_position("WR")
-		self.TEs = self.get_players_by_position("TE")
+		self.QBs = self.build_roster_by_position("QB")
+		self.RBs = self.build_roster_by_position("RB")
+		self.WRs = self.build_roster_by_position("WR")
+		self.TEs = self.build_roster_by_position("TE")
 		self.players = self.QBs + self.RBs + self.WRs + self.TEs
 		self.rb_stats = fetch_row_or_latest(team_rb_stats, self.name, season, week)
 
@@ -192,8 +195,12 @@ class Team:
 		self.team_qb_stats = fetch_row_or_latest(
 			team_qb_stats, self.name, season, week
 		)
+		self.player_dict = {p.id: p for p in self.players}
+	
+	def get_player_by_id(self, player_id: str) -> Player | None:
+		return self.player_dict.get(player_id, None)
 
-	def get_players_by_position(self, position: str):
+	def build_roster_by_position(self, position: str):
 		"""Filter players by position and create player objects."""
 		with pd.option_context("future.no_silent_downcasting", True):
 			position_data = self.roster[(self.roster["position"] == position)].fillna(0)
