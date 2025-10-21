@@ -2,14 +2,14 @@ import pandas as pd
 from utils.quack import Quack
 
 
-team_rb_stats = Quack.fetch_table('team_rushers')
-team_qb_stats = Quack.fetch_table('team_qb_stats')
-team_receiver_stats = Quack.fetch_table('team_receiver_stats')
-team_stats = Quack.fetch_table('team_feats')
-opp_stats = Quack.fetch_table('opp_feats')
-players = Quack.fetch_table('player_weekly_agg')
+team_rb_stats: pd.DataFrame = Quack.fetch_table('team_rushers')
+team_qb_stats: pd.DataFrame = Quack.fetch_table('team_qb_stats')
+team_receiver_stats: pd.DataFrame = Quack.fetch_table('team_receiver_stats')
+team_stats: pd.DataFrame = Quack.fetch_table('team_feats')
+opp_stats: pd.DataFrame = Quack.fetch_table('opp_feats')
+players: pd.DataFrame = Quack.fetch_table('player_weekly_agg')
 
-stat_cols = [
+stat_cols: list[str] = [
 	"completions",
 	"attempts",
 	"passing_yards",
@@ -56,7 +56,7 @@ stat_cols = [
 ]
 
 
-def fetch_row_or_latest(df, team, season, week, opp=False):
+def fetch_row_or_latest(df: pd.DataFrame, team: str, season: int, week: int, opp=False) -> dict:
 	team_field = 'team' if not opp else 'opponent_team'
 	try:
 		df = df.loc[(df[team_field] == team) & (df.season == season)]
@@ -67,20 +67,20 @@ def fetch_row_or_latest(df, team, season, week, opp=False):
 	return row
 
 class Player:
-	def __init__(self, d):
-		self.name = d["player_display_name"]
-		self.id = d["gsis_id"]
-		self.depth_team = int(d["dense_depth"])
-		self.stats = {x: 0 for x in stat_cols}
+	def __init__(self, d: pd.Series):
+		self.name: str = d["player_display_name"]
+		self.id: str = d["gsis_id"]
+		self.depth_team: int = int(d["dense_depth"])
+		self.stats: dict = {x: 0 for x in stat_cols}
 		self.stats["air_yards"] = 0
 		self.stats["yac"] = 0
-		self.features = d.to_dict()
+		self.features: dict = d.to_dict()
 
-	def reset_stats(self):
+	def reset_stats(self) -> None:
 		self.stats = {stat_name: 0 for stat_name in self.stats}
 
 
-	def __getattr__(self, name):
+	def __getattr__(self, name: str):
 		# Redirect attribute access to the stats dictionary
 		if name in self.stats:
 			return self.stats[name]
@@ -106,7 +106,7 @@ class Player:
 		else:
 			raise AttributeError(f"Cannot set unknown attribute '{name}'")
 
-	def stats_to_dict(self):
+	def stats_to_dict(self) -> dict:
 		out = {}
 		out["name"] = self.name
 		out["id"] = self.id
@@ -121,7 +121,7 @@ class QB(Player):
 		self.features = d.to_dict()
 		self.position = "QB"
 
-	def __repr__(self):
+	def __repr__(self) -> str:
 		return f"QB:{self.name} has {self.completions} completions for {self.passing_yards} yards"
 
 
@@ -142,7 +142,7 @@ class WR(Player):
 		super().__init__(d)
 		self.position = "WR"
 
-	def __repr__(self):
+	def __repr__(self) -> str:
 		return f"WR:{self.name} has {self.receptions} receptions for {self.receiving_yards} yards"
 
 
@@ -151,7 +151,7 @@ class TE(Player):
 		super().__init__(d)
 		self.position = "TE"
 
-	def __repr__(self):
+	def __repr__(self) -> str:
 		return f"TE:{self.name} has {self.receptions} receptions for {self.receiving_yards} yards"
 
 
@@ -160,17 +160,17 @@ class K(Player):
 		super().__init__(d)
 		self.position = "K"
 
-	def __repr__(self):
+	def __repr__(self) -> str:
 		return f"K:{self.name} has placeholder FG and placeholder PAT."
 
 
 class Team:
 	def __init__(self, name: str, season: int, week: int, use_current_injuries=False):
-		self.name = name
-		self.opponent = None
-		self.score = 0
-		self.plays = 0
-		self.features = {"last_rusher_drive": -1, "last_rusher_team": -1}
+		self.name: str = name
+		self.opponent: Team | None = None
+		self.score: int = 0
+		self.plays: int = 0
+		self.features: dict[str, int | str | float] = {"last_rusher_drive": -1, "last_rusher_team": -1}
 		self.team_stats = fetch_row_or_latest(team_stats, self.name, season, week)
 		self.opp_stats = fetch_row_or_latest(opp_stats, self.name, season, week, opp=True)
 		self.roster = players.loc[
@@ -182,30 +182,30 @@ class Team:
 			& (self.roster.position.isin(["QB", "WR", "TE", "RB", "K"]))
 		].sort_values(by="dense_depth")
 
-		self.QBs = self.build_roster_by_position("QB")
-		self.RBs = self.build_roster_by_position("RB")
-		self.WRs = self.build_roster_by_position("WR")
-		self.TEs = self.build_roster_by_position("TE")
-		self.players = self.QBs + self.RBs + self.WRs + self.TEs
-		self.rb_stats = fetch_row_or_latest(team_rb_stats, self.name, season, week)
+		self.QBs: list[QB] = self.build_roster_by_position("QB")
+		self.RBs: list[RB] = self.build_roster_by_position("RB")
+		self.WRs: list[WR] = self.build_roster_by_position("WR")
+		self.TEs: list[TE] = self.build_roster_by_position("TE")
+		self.players: list[Player] = self.QBs + self.RBs + self.WRs + self.TEs
+		self.rb_stats: dict[str, str | int | float] = fetch_row_or_latest(team_rb_stats, self.name, season, week)
 
-		self.team_receiver_stats = fetch_row_or_latest(
+		self.team_receiver_stats: dict[str, str | int | float] = fetch_row_or_latest(
 			team_receiver_stats, self.name, season, week
 		)
-		self.team_qb_stats = fetch_row_or_latest(
+		self.team_qb_stats: dict[str, str | int | float]  = fetch_row_or_latest(
 			team_qb_stats, self.name, season, week
 		)
-		self.player_dict = {p.id: p for p in self.players}
+		self.player_dict: dict[str, Player] = {p.id: p for p in self.players}
 	
-	def get_player_by_id(self, player_id: str) -> Player | None:
-		return self.player_dict.get(player_id, None)
+	def get_player_by_id(self, player_id: str) -> Player:
+		return self.player_dict[player_id]
 
 	def build_roster_by_position(self, position: str):
 		"""Filter players by position and create player objects."""
 		with pd.option_context("future.no_silent_downcasting", True):
 			position_data = self.roster[(self.roster["position"] == position)].fillna(0)
 		# Create player objects based on position
-		players = []
+		players: list[Player] = []
 		for _, player_data in position_data.iterrows():
 			if position == "WR":
 				players.append(WR(player_data))
@@ -264,6 +264,6 @@ class Team:
 		self.score = 0
 		self.plays = 0
 
-	def __repr__(self):
+	def __repr__(self) -> str:
 		return f"{self.name} has {self.score} points"
 	

@@ -5,6 +5,7 @@ import numpy as np
 from sim_utils.config import CONFIG
 from sim_utils.plays import play_registry
 from sim_utils.team import Team
+from sim_utils.play_result import PlayResult
 from sim_utils.sim_models import ClockModel
 import joblib
 
@@ -27,6 +28,7 @@ class GameState:
 		self.wind = kwargs.get("wind", random.randint(0, 10))
 		self.temp = kwargs.get("temp", random.randint(40, 90))
 		self.play_functions = {name: cls() for name, cls in play_registry.items()}
+		self.last_play = PlayResult()
 		self.reset_game()
 		self.game_context = self.get_game_state()
 
@@ -61,32 +63,39 @@ class GameState:
 		self.possession = self.lost_kickoff
 		self.sim_one_play(self.possession, kickoff=True)
 
-	def collect_features(self, *argv):
+
+	def collect_features(self, *argv) -> dict:
 		features = {}
 		for arg in argv:
-			features.update(arg)
+			if isinstance(arg, PlayResult):
+				features.update(arg.to_dict())
+			elif arg:
+				features.update(arg)
 		return features
 	
-	def sample_clock(self, game_context, play_result, next_play_type):
-		"""
-		try:
-			raw_features = self.collect_features(
-				game_context, 
-				play_result, 
-				{'next_play_type': next_play_type,
-				'play_type_enc': CONFIG['play_decoding'].get(next_play_type, 0)
-				}
-			)
-
-			play_duration = CLOCK_MODEL.predict(raw_features)
-		except Exception as e:
-			print('AAAHHAHAHAHAHA',e)
-			return 45'"""
-		return 45
+	def sample_clock(self, game_context, next_play_type) -> int:
+		
+		raw_features = self.collect_features(
+			game_context, 
+			self.last_play, 
+			{'next_play_type': next_play_type,
+			'play_type_enc': CONFIG['play_decoding'].get(next_play_type, 0),
+			    'is_field_goal': next_play_type == 'field_goal',
+				'is_no_play': next_play_type == 'no_play',
+				'is_punt': next_play_type == 'punt',
+				'is_qb_kneel': next_play_type =='qb_kneel',
+				'is_qb_spike': next_play_type == 'qb_spike',
+				'is_run': next_play_type == 'run',
+				'is_pass': next_play_type == 'pass',
+				'is_timeout': next_play_type == 'def_timeout' or next_play_type == 'pos_timeout'
+			}
+		)
+		play_duration = CLOCK_MODEL.predict(raw_features)
+		return min(max(0, int(play_duration)), 60)
 
 	def get_game_state(self) -> dict:
 		"""Fetches the current context of the game state. Can be used as model input or for logging"""
-		play_data = {
+		return {
 			"possession": self.possession.name,
 			"quarter": self.quarter,
 			"down": self.down,
@@ -110,11 +119,11 @@ class GameState:
 			"posteam_timeouts_remaining": self.possession.timeouts,
 			"defteam_timeouts_remaining": self.defending.timeouts,
 		}
-		return play_data
 
 	def call_play(self, team: Team, game_context: dict) -> str:
 		"""This uses an XGBoost model to predict what play type will be ran next."""
-		raw_features = self.collect_features(
+		assert team.opponent is not None
+		raw_features: list[dict] = self.collect_features(
 			team.team_stats,
 			team.opponent.opp_stats,
 			game_context
@@ -134,10 +143,11 @@ class GameState:
 			play_type = 'run'
 		return play_type
 	
-	def update_game_state(self, team: Team,  play_result: dict):
+	def update_game_state(self, team: Team,  play_result: PlayResult):
 		#TODO Move this to the gamestate class
 		#self.clock -= 25
-		
+		assert play_result.play_type is not None
+
 		if play_result.play_type in ['run','pass']:
 			yards = play_result.yards
 			self.ydstogo -= yards
@@ -199,13 +209,14 @@ class GameState:
 		else:
 			play_type='kickoff'
 		if self.pbp:
-			play_duration = self.sample_clock(self.game_context,self.pbp[-1], play_type )
+			play_duration = self.sample_clock(self.game_context, play_type )
 			print('play_duration:', play_duration)
 			self.clock -= play_duration
 		self.game_context = self.get_game_state()
 		play_result = self.play_functions[play_type].orchestrate(team, self.game_context)
 		#print(play_result)
 		self.update_game_state(team, play_result)
+		self.last_play = play_result
 		self.log_play(self.game_context, play_result)
 		return 
 

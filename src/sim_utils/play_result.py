@@ -1,4 +1,3 @@
-# plays.py or results.py
 from dataclasses import dataclass, field, asdict
 from typing import Optional, Dict, Any
 
@@ -7,9 +6,9 @@ class PlayResult:
     """Result of a play execution with sensible defaults"""
     
     # Required fields (must be provided)
-    yards: int = None
+    yards: int = 0
     #time_elapsed: float
-    player: str = None
+    player: str = ''
     
     # Optional fields with defaults
     rusher: Optional[object] = None
@@ -28,8 +27,8 @@ class PlayResult:
     kicker_id: Optional[str] = None
     kicker_name: Optional[str] = None
     # Play outcome booleans
-    incomplete_pass: bool = 0
-    completion: bool = 0
+    incomplete_pass: int = 0
+    complete_pass: int = 0
     touchdown: bool = False
     first_down: bool = False
     turnover: bool = False
@@ -46,7 +45,8 @@ class PlayResult:
     
     # Additional context
     play_description: str = ""
-    play_type: str = None
+    play_type: Optional[str] = None
+    play_type_enc: int = -1
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     
