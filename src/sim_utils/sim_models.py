@@ -11,14 +11,13 @@ with open("models/feature_config.yaml", "r") as file:
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = "cpu"
 
-CLOCK_MODEL = joblib.load("models/clock_model.joblib")
+#CLOCK_MODEL = joblib.load("models/clock_model.joblib")
 
 CHOOSE_RUSHER_MODEL = joblib.load("models/choose_rusher.joblib")
 
 CHOOSE_RECEIVER_MODEL = joblib.load("models/choose_receiver.joblib")
 
 COMPLETE_PASS_MODEL = joblib.load("models/complete_pass.joblib")
-
 
 
 class GameModel(ABC):
@@ -37,12 +36,17 @@ class GameModel(ABC):
         pass
     
     
-    def _fetch_model_input(self, *feature_sources) -> list:
+    def _fetch_model_input(self, *feature_sources, ignore_missing=False) -> list:
         combined = {}
         for source in feature_sources:
             if source is not None:
                 combined.update(source)
-        return [combined[col] for col in self.feature_cols]
+        if not ignore_missing:
+            return [combined[col] for col in self.feature_cols]
+        else:
+            input = [combined.get(col, 0) for col in self.feature_cols]
+            print([x for x in self.feature_cols if x not in combined.keys()])
+            return input
 
 class ChooseRusherModel(GameModel):
     """returns position and depth of rusher"""
@@ -75,7 +79,6 @@ class RushYardsModel(GameModel):
     def predict(self, *features: list[dict]) -> int:
         
         features = self._fetch_model_input(*features)
-        print(features)
         x = torch.tensor(features).float().to(device)
         with torch.no_grad():
             preds = self.model(x.reshape(1, -1))[0]
@@ -128,3 +131,37 @@ class YacModel(GameModel):
             preds = torch.softmax(preds, 0)
         sample = (torch.multinomial(preds, 1)).item() - 40
         return sample
+    
+class OOBModel(GameModel):
+    """returns boolean for if a play ended out of bounds or not"""
+    def __init__(self, config):
+        super().__init__(config["oob_cols"])
+        self.play_decoder = config['play_decoding']
+        self._load_model()
+
+    def _load_model(self) -> None:
+        self.model = joblib.load("models/oob_model.joblib")
+
+    def predict(self, *features: list[dict]) -> tuple[str,str]:
+        features = self._fetch_model_input(*features, ignore_missing=True)
+        features
+        preds = self.model.predict_proba([features])
+        oob = np.random.choice(len(preds[0]), p=preds[0])
+        return oob
+
+
+class ClockModel(GameModel):
+    """returns how long between one play starting, and the next play starting.
+    No data to be able to do play clock runoff and play duration, so only one number."""
+    def __init__(self, config):
+        super().__init__(config["clock_cols"])
+        self._load_model()
+        self.play_encoding = config["play_encoding"]
+
+    def _load_model(self) -> None:
+        self.model = joblib.load("models/clock_model.joblib")
+
+    def predict(self, *features: list[dict]) -> float:
+        features = self._fetch_model_input(*features, ignore_missing=True)
+        duration = self.model.predict([features])[0]
+        return duration

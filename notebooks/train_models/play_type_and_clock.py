@@ -19,7 +19,7 @@ select
         quarter_seconds_remaining,
         half_seconds_remaining,
         game_seconds_remaining,
-        yards_gained,
+        yards_gained as yards,
         air_yards,
         incomplete_pass,
         out_of_bounds,
@@ -32,9 +32,6 @@ select
     ydstogo,
     posteam_score,
     score_differential,
-    quarter_seconds_remaining,
-    half_seconds_remaining,
-    game_seconds_remaining,
     wind,
     temp,
     spread_line,
@@ -118,7 +115,7 @@ clock_x = [
     "quarter_seconds_remaining",
     "half_seconds_remaining",
     "game_seconds_remaining",
-    "yards_gained",
+    "yards",
     "incomplete_pass",
     "out_of_bounds",
     "timeout",
@@ -167,7 +164,8 @@ joblib.dump(play_type_model, "models/run_or_pass.joblib")
 
 feature_config = {
     "run_or_pass_cols": x_cols,
-    "play_encoding": {k: v for v, k in play_type_mapping.items()},
+    "play_decoding": {k: v for v, k in play_type_mapping.items()},
+    "play_encoding": play_type_mapping
 }
 update_config(feature_config)
 print("play type model saved.")

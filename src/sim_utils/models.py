@@ -11,8 +11,6 @@ with open("models/feature_config.yaml", "r") as file:
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = "cpu"
 
-CLOCK_MODEL = joblib.load("models/clock_model.joblib")
-
 CHOOSE_RUSHER_MODEL = joblib.load("models/choose_rusher.joblib")
 
 CHOOSE_RECEIVER_MODEL = joblib.load("models/choose_receiver.joblib")
@@ -105,7 +103,6 @@ class AirYardsModel(GameModel):
         return sample
     
 
-
 class YacModel(GameModel):
     """returns yards gained"""
     def __init__(self, config):
@@ -128,7 +125,19 @@ class YacModel(GameModel):
         sample = (torch.multinomial(preds, 1)).item() - 40
         return sample
 
-class ModelRegistry:
-    _models = {
-        'YAC_MODEL':
-    }
+
+class ClockModel(GameModel):
+    """returns how long between one play starting, and the next play starting.
+    No data to be able to do play clock runoff and play duration, so only one number."""
+    def __init__(self, config):
+        super().__init__(config["clock_cols"])
+        self._load_model()
+
+    def _load_model(self) -> None:
+        self.model = joblib.load("models/clock_model.joblib")
+
+    def predict(self, *features: list[dict]) -> tuple[str,str]:
+        features = self._fetch_model_input(*features)
+        preds = self.model.predict_proba([features])
+        rusher_idx = np.random.choice(len(preds[0]), p=preds[0])
+        return rusher_idx

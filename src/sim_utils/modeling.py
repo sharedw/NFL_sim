@@ -207,7 +207,6 @@ def create_reg_model(df, x_cols, y_col):
 
     print(f"Mean Squared Error: {mse}")
     print(f"R-squared: {r2}")
-
     return model
 
 
