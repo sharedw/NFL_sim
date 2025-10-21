@@ -11,8 +11,6 @@ with open("models/feature_config.yaml", "r") as file:
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = "cpu"
 
-#CLOCK_MODEL = joblib.load("models/clock_model.joblib")
-
 CHOOSE_RUSHER_MODEL = joblib.load("models/choose_rusher.joblib")
 
 CHOOSE_RECEIVER_MODEL = joblib.load("models/choose_receiver.joblib")
@@ -20,11 +18,11 @@ CHOOSE_RECEIVER_MODEL = joblib.load("models/choose_receiver.joblib")
 COMPLETE_PASS_MODEL = joblib.load("models/complete_pass.joblib")
 
 
+
 class GameModel(ABC):
     def __init__(self, feature_cols):
         self.feature_cols = feature_cols
         self.model = self._load_model()  # Force subclasses to implement
-        self.model_name = None
     
     @abstractmethod
     def _load_model(self):
@@ -37,34 +35,26 @@ class GameModel(ABC):
         pass
     
     
-    def _fetch_model_input(self, *feature_sources, ignore_missing=False) -> list:
+    def _fetch_model_input(self, *feature_sources) -> list:
         combined = {}
         for source in feature_sources:
             if source is not None:
                 combined.update(source)
-        if not ignore_missing:
-            return [combined[col] for col in self.feature_cols]
-        else:
-            input = [combined.get(col, 0) for col in self.feature_cols]
-            missing_features = [x for x in self.feature_cols if x not in combined.keys()]
-            if missing_features:
-                print(self.model_name, 'missing input cols:', missing_features)
-            return input
+        return [combined[col] for col in self.feature_cols]
 
 class ChooseRusherModel(GameModel):
     """returns position and depth of rusher"""
     def __init__(self, config):
         super().__init__(config["choose_rusher_cols"])
         self._load_model()
-        self.model_name = 'ChooseRusherModel'
 
     def _load_model(self) -> None:
         self.model = joblib.load("models/choose_rusher.joblib")
 
-    def predict(self, *features: list[dict]) -> int:
-        features: dict = self._fetch_model_input(*features)
+    def predict(self, *features: list[dict]) -> tuple[str,str]:
+        features = self._fetch_model_input(*features)
         preds = self.model.predict_proba([features])
-        rusher_idx: int = np.random.choice(len(preds[0]), p=preds[0])
+        rusher_idx = np.random.choice(len(preds[0]), p=preds[0])
         return rusher_idx
     
 
@@ -73,10 +63,9 @@ class RushYardsModel(GameModel):
     def __init__(self, config):
         super().__init__(config["rush_yard_cols"])
         self._load_model()
-        self.model_name: str = 'RushYardsModel'
 
     def _load_model(self) -> None:
-        model_path: str = "models/run_yards_gained.pt"
+        model_path = "models/run_yards_gained.pt"
         self.model = maskedModel(n_in=6, n_hidden=64, n_out=140).to(device)
         self.model.load_state_dict(torch.load(model_path, weights_only=True))
 
@@ -84,7 +73,7 @@ class RushYardsModel(GameModel):
     def predict(self, *features: list[dict]) -> int:
         
         features = self._fetch_model_input(*features)
-        x = torch.tensor(features).float().to(device)
+        x = torch.tensor(features).to(device)
         with torch.no_grad():
             preds = self.model(x.reshape(1, -1))[0]
             preds = torch.softmax(preds, 0)
@@ -96,7 +85,6 @@ class AirYardsModel(GameModel):
     def __init__(self, config):
         super().__init__(config["air_yard_cols"])
         self._load_model()
-        self.model_name = 'AirYardsModel'
 
     def _load_model(self) -> None:
         model_path = "models/air_yards.pt"
@@ -115,13 +103,11 @@ class AirYardsModel(GameModel):
         return sample
     
 
-
 class YacModel(GameModel):
     """returns yards gained"""
     def __init__(self, config):
         super().__init__(config["yac_cols"])
         self._load_model()
-        self.model_name = 'YacModel'
 
     def _load_model(self) -> None:
         model_path = "models/yac.pt"
@@ -138,24 +124,6 @@ class YacModel(GameModel):
             preds = torch.softmax(preds, 0)
         sample = (torch.multinomial(preds, 1)).item() - 40
         return sample
-    
-class OOBModel(GameModel):
-    """returns boolean for if a play ended out of bounds or not"""
-    def __init__(self, config):
-        super().__init__(config["oob_cols"])
-        self.play_decoder = config['play_decoding']
-        self._load_model()
-        self.model_name = 'OOBModel'
-
-    def _load_model(self) -> None:
-        self.model = joblib.load("models/oob_model.joblib")
-
-    def predict(self, *features: list[dict]) -> int:
-        features = self._fetch_model_input(*features, ignore_missing=True)
-        features
-        preds = self.model.predict_proba([features])
-        oob: int = np.random.choice(len(preds[0]), p=preds[0])
-        return oob
 
 
 class ClockModel(GameModel):
@@ -164,13 +132,12 @@ class ClockModel(GameModel):
     def __init__(self, config):
         super().__init__(config["clock_cols"])
         self._load_model()
-        self.play_encoding = config["play_encoding"]
-        self.model_name = 'ClockModel'
 
     def _load_model(self) -> None:
         self.model = joblib.load("models/clock_model.joblib")
 
-    def predict(self, *features: list[dict]) -> float:
-        features = self._fetch_model_input(*features, ignore_missing=True)
-        duration = self.model.predict([features])[0]
-        return duration
+    def predict(self, *features: list[dict]) -> tuple[str,str]:
+        features = self._fetch_model_input(*features)
+        preds = self.model.predict_proba([features])
+        rusher_idx = np.random.choice(len(preds[0]), p=preds[0])
+        return rusher_idx
