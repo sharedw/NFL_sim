@@ -2,12 +2,12 @@ import pandas as pd
 from utils.quack import Quack
 
 
-team_rb_stats: pd.DataFrame = Quack.fetch_table('team_rushers')
-team_qb_stats: pd.DataFrame = Quack.fetch_table('team_qb_stats')
-team_receiver_stats: pd.DataFrame = Quack.fetch_table('team_receiver_stats')
-team_stats: pd.DataFrame = Quack.fetch_table('team_feats')
-opp_stats: pd.DataFrame = Quack.fetch_table('opp_feats')
-players: pd.DataFrame = Quack.fetch_table('player_weekly_agg')
+team_rb_stats: pd.DataFrame = Quack.fetch_table("team_rushers")
+team_qb_stats: pd.DataFrame = Quack.fetch_table("team_qb_stats")
+team_receiver_stats: pd.DataFrame = Quack.fetch_table("team_receiver_stats")
+team_stats: pd.DataFrame = Quack.fetch_table("team_feats")
+opp_stats: pd.DataFrame = Quack.fetch_table("opp_feats")
+players: pd.DataFrame = Quack.fetch_table("player_weekly_agg")
 
 stat_cols: list[str] = [
 	"completions",
@@ -56,15 +56,18 @@ stat_cols: list[str] = [
 ]
 
 
-def fetch_row_or_latest(df: pd.DataFrame, team: str, season: int, week: int, opp=False) -> dict:
-	team_field = 'team' if not opp else 'opponent_team'
+def fetch_row_or_latest(
+	df: pd.DataFrame, team: str, season: int, week: int, opp=False
+) -> dict:
+	team_field = "team" if not opp else "opponent_team"
 	try:
 		df = df.loc[(df[team_field] == team) & (df.season == season)]
 		row = df.loc[(df.week == min(df.week.max(), week))].to_dict(orient="records")[0]
 	except Exception as e:
-		print(f'No data exists for {team} in {season}')
+		print(f"No data exists for {team} in {season}")
 		raise e
 	return row
+
 
 class Player:
 	def __init__(self, d: pd.Series):
@@ -78,7 +81,6 @@ class Player:
 
 	def reset_stats(self) -> None:
 		self.stats = {stat_name: 0 for stat_name in self.stats}
-
 
 	def __getattr__(self, name: str):
 		# Redirect attribute access to the stats dictionary
@@ -170,16 +172,18 @@ class Team:
 		self.opponent: Team | None = None
 		self.score: int = 0
 		self.plays: int = 0
-		self.features: dict[str, int | str | float] = {"last_rusher_drive": -1, "last_rusher_team": -1}
+		self.features: dict[str, int | str | float] = {
+			"last_rusher_drive": -1,
+			"last_rusher_team": -1,
+		}
 		self.team_stats = fetch_row_or_latest(team_stats, self.name, season, week)
-		self.opp_stats = fetch_row_or_latest(opp_stats, self.name, season, week, opp=True)
-		self.roster = players.loc[
-			(players.team == name) & (players.season == season)
-		]
-		self.roster = self.roster.loc[
-			(self.roster.week == min(self.roster.week.max(), week))
-			#& (self.roster.formation == "Offense")
-			& (self.roster.position.isin(["QB", "WR", "TE", "RB", "K"]))
+		self.opp_stats = fetch_row_or_latest(
+			opp_stats, self.name, season, week, opp=True
+		)
+		self.roster = players.loc[(players.team == name) 
+								  & (players.season == season)
+								  & (players.week == min(players.week.max(), week))
+								  & (players.position.isin(["QB", "WR", "TE", "RB", "K"]))
 		].sort_values(by="dense_depth")
 
 		self.QBs: list[QB] = self.build_roster_by_position("QB")
@@ -187,16 +191,23 @@ class Team:
 		self.WRs: list[WR] = self.build_roster_by_position("WR")
 		self.TEs: list[TE] = self.build_roster_by_position("TE")
 		self.players: list[Player] = self.QBs + self.RBs + self.WRs + self.TEs
-		self.rb_stats: dict[str, str | int | float] = fetch_row_or_latest(team_rb_stats, self.name, season, week)
+		self.rb_stats: dict[str, str | int | float] = fetch_row_or_latest(
+			team_rb_stats, self.name, season, week
+		)
 
 		self.team_receiver_stats: dict[str, str | int | float] = fetch_row_or_latest(
 			team_receiver_stats, self.name, season, week
 		)
-		self.team_qb_stats: dict[str, str | int | float]  = fetch_row_or_latest(
+		self.team_qb_stats: dict[str, str | int | float] = fetch_row_or_latest(
 			team_qb_stats, self.name, season, week
 		)
 		self.player_dict: dict[str, Player] = {p.id: p for p in self.players}
-	
+
+		#lookup for easy retrieval from choose rusher and choose passer etc.
+		self.depth_lookup = {}
+		for p in self.players:
+			self.depth_lookup[(p.position, p.depth_team)] = p
+
 	def get_player_by_id(self, player_id: str) -> Player:
 		return self.player_dict[player_id]
 
@@ -204,7 +215,7 @@ class Team:
 		"""Filter players by position and create player objects."""
 		with pd.option_context("future.no_silent_downcasting", True):
 			position_data = self.roster[(self.roster["position"] == position)].fillna(0)
-		# Create player objects based on position
+
 		players: list[Player] = []
 		for _, player_data in position_data.iterrows():
 			if position == "WR":
@@ -217,41 +228,20 @@ class Team:
 				players.append(TE(player_data))
 		return players
 
-	def get_depth_pos(self, pos: str, depth: int):
-		"""input a position and team depth, to get the player
-		used to go from ML output -> player object"""
+	def get_depth_pos(self, pos: str, depth: int) -> QB | WR | TE | RB:
+
 		while depth >= 0:
-			if pos == "WR":
-				for player in self.WRs:
-					if player.depth_team == depth:
-						return player
-			if pos == "RB":
-				for player in self.RBs:
-					if player.depth_team == depth:
-						return player
-			if pos == "TE":
-				for player in self.TEs:
-					if player.depth_team == depth:
-						return player
-			if pos == "QB":
-				for player in self.QBs:
-					if player.depth_team == depth:
-						return player
+			player = self.depth_lookup.get((pos, depth))
+			if player:
+				return player
 			depth -= 1
-		print(pos, depth, self.name, "You want a player that does not exist")
-		if pos == "WR":
-				return self.WRs[0]
-		if pos == "RB":
-				return self.RBs[0]
-		if pos == "TE":
-				return self.TEs[0]
-		if pos == "QB":
-				return self.QBs[0]
-		raise ValueError("You want a player that does not exist")
+		
+		print('PANIICICCCC!!!')
+		return self.QBs[0]
 
 	def game_results(self, game_id, df=False):
 		r = [
-			{"team": self.name, "position": x.position, "id": x.id, "sim_id":game_id}
+			{"team": self.name, "position": x.position, "id": x.id, "sim_id": game_id}
 			| x.stats_to_dict()
 			for x in self.players
 		]
@@ -266,4 +256,3 @@ class Team:
 
 	def __repr__(self) -> str:
 		return f"{self.name} has {self.score} points"
-	
