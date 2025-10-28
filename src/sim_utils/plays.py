@@ -28,15 +28,7 @@ COMPLETE_PASS_MODEL = joblib.load("models/complete_pass.joblib")
 class Play(ABC):
     def __init__(self):
         self.clock_cols = CONFIG["clock_cols"]  # TODO: doesn't belong here tbh
-        self.play_context = {}
         self.play_type = None
-        self.play_data = {
-            "incomplete_pass": 0,
-            "out_of_bounds": 0,
-            "player": None,
-            "timeout": 0,
-            "sp": 0,
-        }
 
     @abstractmethod
     def execute_play(self, team: Team, game_context: dict) -> PlayResult:
@@ -136,7 +128,6 @@ class PassPlay(Play):
         else:
             yac = YAC_MODEL.predict(raw_features)
             yac = min(yac, (game_context["yardline_100"] - air_yards))
-        self.play_context.update({"air_yards": air_yards, "yac": yac})
         return air_yards, yac
 
     def sample_completion(self, qb, receiver, team, air_yards, game_context):
