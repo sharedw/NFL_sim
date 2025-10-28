@@ -27,7 +27,6 @@ COMPLETE_PASS_MODEL = joblib.load("models/complete_pass.joblib")
 
 class Play(ABC):
     def __init__(self):
-        self.clock_cols = CONFIG["clock_cols"]  # TODO: doesn't belong here tbh
         self.play_type = None
 
     @abstractmethod
@@ -47,7 +46,6 @@ class Play(ABC):
         return play_result
 
     def collect_features(self, *argv) -> dict:
-        # TODO pass game context features directly
         features = {}
         for arg in argv:
             if isinstance(arg, PlayResult):
@@ -87,7 +85,6 @@ class RunPlay(Play):
         player = team.get_player_by_id(play_result.rusher_id)
         player.carries += 1
         player.rushing_yards += play_result.yards
-        # self.game.player = self.player.name #TODO make sure this goes somewhere
         return
 
     def execute_play(self, team: Team, game_context: dict):
@@ -157,9 +154,7 @@ class PassPlay(Play):
         assert play_result.passer_id is not None
         assert play_result.receiver_id is not None
         passer = team.get_player_by_id(play_result.passer_id)
-        receiver = team.get_player_by_id(
-            play_result.receiver_id
-        )  # TODO THIS LOOKS WEIRD NOW
+        receiver = team.get_player_by_id(play_result.receiver_id)
         passer.attempts += 1
         receiver.targets += 1
         if play_result.complete_pass:
