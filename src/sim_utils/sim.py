@@ -36,17 +36,17 @@ def sim_games(
 
 
 def compare_stats(
-    sim_result, stats, season=2024, start_week=0, end_week=10, min_filter=None
+    sim_result, stats, season=2024, week=0, min_filter=None
 ):
     select_cols = ", ".join([f"avg({s}) as {s}" for s in stats])
     sql = f"""
         select player_display_name as name, team, {select_cols}
         from weekly
-        where season = {season} and week between {start_week} and {end_week}
+        where season = {season} and week = {week}
         group by all
     """
     real = Quack.query(sql)
-
+    print(real)
     med = sim_result.groupby(["name", "team"])[stats].median().round(2).reset_index()
 
     comb = real.merge(med, on=["name", "team"], suffixes=("_real", "_pred"))
@@ -68,11 +68,16 @@ def compare_stats(
     return results
 
 
-result = sim_games("TB", "KC", 2025, week=6, n_games=30)
+week = 8
+season = 2025
+
+result = sim_games("KC", "WAS", season, week, n_games=20)
 comp = compare_stats(
     result,
     ["receptions", "carries", "receiving_yards", "rushing_yards", "passing_yards"],
     min_filter=[2, 2, 20, 20, 40],
+    season=season,
+    week=week
 )
 
 print(comp)
