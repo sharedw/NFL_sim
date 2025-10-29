@@ -144,7 +144,6 @@ class GameState:
 		return play_type
 	
 	def update_game_state(self, team: Team,  play_result: PlayResult):
-		#TODO Move this to the gamestate class
 		#self.clock -= 25
 		assert play_result.play_type is not None
 
