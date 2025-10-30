@@ -6,7 +6,7 @@ import yaml
 import numpy as np
 
 with open("models/feature_config.yaml", "r") as file:
-    CONFIG = yaml.safe_load(file)
+	CONFIG = yaml.safe_load(file)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = "cpu"
@@ -39,13 +39,13 @@ class GameModel(ABC):
         return [feature_sources[col] for col in self.feature_cols]
 
 class ChooseRusherModel(GameModel):
-    """returns position and depth of rusher"""
-    def __init__(self, config):
-        super().__init__(config["choose_rusher_cols"])
-        self._load_model()
+	"""returns position and depth of rusher"""
+	def __init__(self, config):
+		super().__init__(config["choose_rusher_cols"])
+		self._load_model()
 
-    def _load_model(self) -> None:
-        self.model = joblib.load("models/choose_rusher.joblib")
+	def _load_model(self) -> None:
+		self.model = joblib.load("models/choose_rusher.joblib")
 
     def predict(self, input: dict) -> int:
         features = self._fetch_model_input(input)
@@ -100,15 +100,15 @@ class AirYardsModel(GameModel):
     
 
 class YacModel(GameModel):
-    """returns yards gained"""
-    def __init__(self, config):
-        super().__init__(config["yac_cols"])
-        self._load_model()
+	"""returns yards gained"""
+	def __init__(self, config):
+		super().__init__(config["yac_cols"])
+		self._load_model()
 
-    def _load_model(self) -> None:
-        model_path = "models/yac.pt"
-        self.model = maskedModelYac(n_in=26, n_hidden=256, n_out=140).to(device)
-        self.model.load_state_dict(torch.load(model_path, weights_only=True))
+	def _load_model(self) -> None:
+		model_path = "models/yac.pt"
+		self.model = maskedModelYac(n_in=26, n_hidden=256, n_out=140).to(device)
+		self.model.load_state_dict(torch.load(model_path, weights_only=True))
 
 
     def predict(self, features: dict) -> int:

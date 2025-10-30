@@ -27,16 +27,7 @@ COMPLETE_PASS_MODEL = joblib.load("models/complete_pass.joblib")
 
 class Play(ABC):
     def __init__(self):
-        self.clock_cols = CONFIG["clock_cols"]  # TODO: doesn't belong here tbh
-        self.play_context = {}
         self.play_type = None
-        self.play_data = {
-            "incomplete_pass": 0,
-            "out_of_bounds": 0,
-            "player": None,
-            "timeout": 0,
-            "sp": 0,
-        }
 
     @abstractmethod
     def execute_play(self, team: Team, game_context: dict) -> PlayResult:
@@ -55,7 +46,6 @@ class Play(ABC):
         return play_result
 
     def collect_features(self, *argv) -> dict:
-        # TODO pass game context features directly
         features = {}
         for arg in argv:
             if isinstance(arg, PlayResult):
@@ -95,7 +85,6 @@ class RunPlay(Play):
         player = team.get_player_by_id(play_result.rusher_id)
         player.carries += 1
         player.rushing_yards += play_result.yards
-        # self.game.player = self.player.name #TODO make sure this goes somewhere
         return
 
     def execute_play(self, team: Team, game_context: dict):
@@ -136,7 +125,6 @@ class PassPlay(Play):
         else:
             yac = YAC_MODEL.predict(raw_features)
             yac = min(yac, (game_context["yardline_100"] - air_yards))
-        self.play_context.update({"air_yards": air_yards, "yac": yac})
         return air_yards, yac
 
     def sample_completion(self, qb, receiver, team, air_yards, game_context):
@@ -166,9 +154,7 @@ class PassPlay(Play):
         assert play_result.passer_id is not None
         assert play_result.receiver_id is not None
         passer = team.get_player_by_id(play_result.passer_id)
-        receiver = team.get_player_by_id(
-            play_result.receiver_id
-        )  # TODO THIS LOOKS WEIRD NOW
+        receiver = team.get_player_by_id(play_result.receiver_id)
         passer.attempts += 1
         receiver.targets += 1
         if play_result.complete_pass:

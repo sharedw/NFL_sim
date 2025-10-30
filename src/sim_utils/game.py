@@ -144,7 +144,6 @@ class GameState:
 		return play_type
 	
 	def update_game_state(self, team: Team,  play_result: PlayResult):
-		#TODO Move this to the gamestate class
 		#self.clock -= 25
 		assert play_result.play_type is not None
 
@@ -210,7 +209,6 @@ class GameState:
 			play_type='kickoff'
 		if self.pbp:
 			play_duration = self.sample_clock(self.game_context, play_type )
-			print('play_duration:', play_duration)
 			self.clock -= play_duration
 		self.game_context = self.get_game_state()
 		play_result = self.play_functions[play_type].orchestrate(team, self.game_context)
@@ -229,7 +227,8 @@ class GameState:
 			"player": play_result.get('rusher', play_result.get('receiver',0)),
 			"play_time_elapsed": 'play_time_elapsed'
 		}"""
-		play_log = play_result.to_dict().update(self.game_context)
+		play_result.to_dict().update(self.game_context)
+		play_log = play_result
 		self.pbp.append(play_log)
 		return play_result
 
