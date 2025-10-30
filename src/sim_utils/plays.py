@@ -51,7 +51,7 @@ class Play(ABC):
         play_result = self.execute_play(team, game_context)
         play_result.play_type = self.play_type
         oob = self.sample_oob(game_context, play_result)
-        play_result.out_of_bounds = oob
+        play_result.out_of_bounds = bool(oob)
         return play_result
 
     def collect_features(self, *argv) -> dict:
@@ -218,7 +218,7 @@ class FieldGoal(Play):
         self.play_type = "field_goal"
 
     def update_player_stats(
-        self, team: Team, play_result: dict
+        self, team: Team, play_result: PlayResult
     ):  # TODO: add play_result stuff
         kicker = "dork"  # team.get_player_by_id(play_result['passer_id']) #noqa
         return

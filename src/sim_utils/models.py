@@ -35,12 +35,8 @@ class GameModel(ABC):
         pass
     
     
-    def _fetch_model_input(self, *feature_sources) -> list:
-        combined = {}
-        for source in feature_sources:
-            if source is not None:
-                combined.update(source)
-        return [combined[col] for col in self.feature_cols]
+    def _fetch_model_input(self, feature_sources: dict) -> list:
+        return [feature_sources[col] for col in self.feature_cols]
 
 class ChooseRusherModel(GameModel):
     """returns position and depth of rusher"""
@@ -51,8 +47,8 @@ class ChooseRusherModel(GameModel):
     def _load_model(self) -> None:
         self.model = joblib.load("models/choose_rusher.joblib")
 
-    def predict(self, *features: list[dict]) -> tuple[str,str]:
-        features = self._fetch_model_input(*features)
+    def predict(self, input: dict) -> int:
+        features = self._fetch_model_input(input)
         preds = self.model.predict_proba([features])
         rusher_idx = np.random.choice(len(preds[0]), p=preds[0])
         return rusher_idx
@@ -70,9 +66,9 @@ class RushYardsModel(GameModel):
         self.model.load_state_dict(torch.load(model_path, weights_only=True))
 
 
-    def predict(self, *features: list[dict]) -> int:
+    def predict(self, features: dict) -> int:
         
-        features = self._fetch_model_input(*features)
+        features: list = self._fetch_model_input(features)
         x = torch.tensor(features).to(device)
         with torch.no_grad():
             preds = self.model(x.reshape(1, -1))[0]
@@ -92,9 +88,9 @@ class AirYardsModel(GameModel):
         self.model.load_state_dict(torch.load(model_path, weights_only=True))
 
 
-    def predict(self, *features: list[dict]) -> int:
+    def predict(self, features: dict) -> int:
         
-        features = self._fetch_model_input(*features)
+        features: list = self._fetch_model_input(features)
         x = torch.tensor(features).to(device)
         with torch.no_grad():
             preds = self.model(x.reshape(1, -1))[0]
@@ -115,9 +111,9 @@ class YacModel(GameModel):
         self.model.load_state_dict(torch.load(model_path, weights_only=True))
 
 
-    def predict(self, *features: list[dict]) -> int:
+    def predict(self, features: dict) -> int:
         
-        features = self._fetch_model_input(*features)
+        features: list = self._fetch_model_input(features)
         x = torch.tensor(features).to(device)
         with torch.no_grad():
             preds = self.model(x.reshape(1, -1))[0]
@@ -136,8 +132,8 @@ class ClockModel(GameModel):
     def _load_model(self) -> None:
         self.model = joblib.load("models/clock_model.joblib")
 
-    def predict(self, *features: list[dict]) -> tuple[str,str]:
-        features = self._fetch_model_input(*features)
+    def predict(self, features: dict) -> int:
+        features: list = self._fetch_model_input(features)
         preds = self.model.predict_proba([features])
-        rusher_idx = np.random.choice(len(preds[0]), p=preds[0])
-        return rusher_idx
+        duration = np.random.choice(len(preds[0]), p=preds[0])
+        return int(duration)

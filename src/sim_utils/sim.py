@@ -1,13 +1,13 @@
 from sim_utils.game import GameState
 from sim_utils.team import Team
-import pandas as pd
 
 
-def sim_games(team1_name: str, team2_name: str, season:int, week:int, n_games:int=100) -> pd.DataFrame:
+def sim_games(team1_name: str, team2_name: str, season:int, week:int, n_games:int=100) -> list:
 	t1 = Team(team1_name, season, week)
 	t2 = Team(team2_name, season, week)
 
 	game = GameState(t1, t2)
+	result = []
 
 	for _ in range(n_games):
 		game.start_game()
