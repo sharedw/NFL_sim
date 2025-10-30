@@ -61,8 +61,8 @@ class ChooseRusherModel(GameModel):
     def _load_model(self) -> None:
         self.model = joblib.load("models/choose_rusher.joblib")
 
-    def predict(self, *features: list[dict]) -> int:
-        features: dict = self._fetch_model_input(*features)
+    def predict(self, input: dict) -> int:
+        features = self._fetch_model_input(input)
         preds = self.model.predict_proba([features])
         rusher_idx: int = np.random.choice(len(preds[0]), p=preds[0])
         return rusher_idx
@@ -81,9 +81,9 @@ class RushYardsModel(GameModel):
         self.model.load_state_dict(torch.load(model_path, weights_only=True))
 
 
-    def predict(self, *features: list[dict]) -> int:
+    def predict(self, input: dict) -> int:
         
-        features = self._fetch_model_input(*features)
+        features = self._fetch_model_input(input)
         x = torch.tensor(features).float().to(device)
         with torch.no_grad():
             preds = self.model(x.reshape(1, -1))[0]
@@ -104,9 +104,9 @@ class AirYardsModel(GameModel):
         self.model.load_state_dict(torch.load(model_path, weights_only=True))
 
 
-    def predict(self, *features: list[dict]) -> int:
+    def predict(self, input: dict) -> int:
         
-        features = self._fetch_model_input(*features)
+        features = self._fetch_model_input(input)
         x = torch.tensor(features).to(device)
         with torch.no_grad():
             preds = self.model(x.reshape(1, -1))[0]
@@ -129,9 +129,9 @@ class YacModel(GameModel):
         self.model.load_state_dict(torch.load(model_path, weights_only=True))
 
 
-    def predict(self, *features: list[dict]) -> int:
+    def predict(self, input: dict) -> int:
         
-        features = self._fetch_model_input(*features)
+        features = self._fetch_model_input(input)
         x = torch.tensor(features).to(device)
         with torch.no_grad():
             preds = self.model(x.reshape(1, -1))[0]
@@ -150,8 +150,8 @@ class OOBModel(GameModel):
     def _load_model(self) -> None:
         self.model = joblib.load("models/oob_model.joblib")
 
-    def predict(self, *features: list[dict]) -> int:
-        features = self._fetch_model_input(*features, ignore_missing=True)
+    def predict(self, input: dict) -> int:
+        features = self._fetch_model_input(input, ignore_missing=True)
         features
         preds = self.model.predict_proba([features])
         oob: int = np.random.choice(len(preds[0]), p=preds[0])
@@ -170,7 +170,7 @@ class ClockModel(GameModel):
     def _load_model(self) -> None:
         self.model = joblib.load("models/clock_model.joblib")
 
-    def predict(self, *features: list[dict]) -> float:
-        features = self._fetch_model_input(*features, ignore_missing=True)
+    def predict(self, input: dict) -> float:
+        features = self._fetch_model_input(input, ignore_missing=True)
         duration = self.model.predict([features])[0]
         return duration

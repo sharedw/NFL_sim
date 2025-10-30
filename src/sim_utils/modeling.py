@@ -112,12 +112,12 @@ class maskedModel(nn.Module):
 	def forward(self, x):
 		# Extract the feature to pass to the final layer (e.g., the first feature)
 		yardline = x[:, 0].unsqueeze(1)  # Assuming you want the first feature, shape [batch_size, 1]
-		#td_bin = (yardline + 40).long().squeeze(1)
-		#td_logits = self.td_head(x)
+		td_bin = (yardline + 40).long().squeeze(1)
+		td_logits = self.td_head(x)
 		x = self.main_layers(x)
 		logits = self.output_layer(x)
-		#batch_indices = torch.arange(logits.size(0), device=logits.device)
-		#logits[batch_indices, td_bin] = logits[batch_indices, td_bin] + td_logits.squeeze(1)
+		batch_indices = torch.arange(logits.size(0), device=logits.device)
+		logits[batch_indices, td_bin] = logits[batch_indices, td_bin] + td_logits.squeeze(1)
 		
 		yard_values = torch.arange(-40, self.n_out - 40, device=x.device).float().unsqueeze(0)
 		mask = (yard_values <= yardline).float()
