@@ -2,8 +2,8 @@ from sim_utils.game import GameState
 from sim_utils.team import Team
 
 
-t1 = Team('DET', 2025, 7)
-t2 = Team('MIN', 2025, 7)
+t1 = Team('DET', 2025, 8)
+t2 = Team('MIN', 2025, 8)
 
 game = GameState(t1, t2)
 

@@ -74,6 +74,7 @@ class RushYardsModel(GameModel):
             preds = self.model(x.reshape(1, -1))[0]
             preds = torch.softmax(preds, 0)
         sample = (torch.multinomial(preds, 1)).item() - 40
+        print('rush_yards', sample)
         return sample
 
 class AirYardsModel(GameModel):
