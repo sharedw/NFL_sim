@@ -13,8 +13,8 @@ class Quack:
         return df
 
     @staticmethod
-    def query(query):
-        con = duckdb.connect("data/nfl.duckdb")
+    def query(query, db_path: str = "data/nfl.duckdb"):
+        con = duckdb.connect(db_path)
         try:
             df = con.execute(query).fetch_df()
         finally:
@@ -22,8 +22,8 @@ class Quack:
         return df
     
     @staticmethod
-    def file_query(query_file_name):
-        con = duckdb.connect("data/nfl.duckdb")
+    def file_query(query_file_name,  db_path: str = "data/nfl.duckdb"):
+        con = duckdb.connect(db_path)
         try:
             with open(f"./data/queries/{query_file_name}.sql", "r") as f:
                 sql = f.read()
@@ -32,7 +32,7 @@ class Quack:
             con.close()
         return df
     
-    def select_columns(cols:list, alias:str=None, coalesce=False):
+    def select_columns(cols:list, alias:str | None=None, coalesce=False):
 
         if alias:
             temp = (f'{alias}.' + x for x in cols)
