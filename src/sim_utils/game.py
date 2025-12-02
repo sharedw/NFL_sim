@@ -215,21 +215,16 @@ class GameState:
 		play_result = self.play_functions[play_type].orchestrate(team, self.game_context)
 		self.update_game_state(team, play_result)
 		self.last_play = play_result
-		self.log_play(self.game_context, play_result)
+		self.log_play(play_result)
 		return 
 
 
-	def log_play(self, game_context, play_result):
+	def log_play(self, play_result: PlayResult) -> dict:
 		"""Logs the context of the game state at each play."""
-		"""play_data = {
-			"play_type": play_result.play_type,
-			"yards_gained": play_result.yards,
-			"player": play_result.get('rusher', play_result.get('receiver',0)),
-			"play_time_elapsed": 'play_time_elapsed'
-		}"""
-		play_log = play_result.to_dict().update(self.game_context)
+		play_log = play_result.to_dict()
+		play_log.update(self.game_context)
 		self.pbp.append(play_log)
-		return play_result
+		return play_log
 
 	def td_check(self, team):
 		if self.ball_position <= 0:
@@ -276,7 +271,7 @@ class GameState:
 		else:
 			print(f"{self.away.name} has won {self.away.score} - {self.home.score}")
 
-	def game_results(self, df=False):
+	def game_results(self, df=False) -> pd.DataFrame | dict:
 		res1 = self.home.game_results(self.game_id,df=False)
 		res2 = self.away.game_results(self.game_id,df=False)
 		res = res1 + res2
