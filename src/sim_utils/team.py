@@ -2,12 +2,18 @@ import pandas as pd
 from utils.quack import Quack
 
 
-team_rb_stats: pd.DataFrame = Quack.fetch_table('team_rushers')
-team_qb_stats: pd.DataFrame = Quack.fetch_table('team_qb_stats')
-team_receiver_stats: pd.DataFrame = Quack.fetch_table('team_receiver_stats')
-team_stats: pd.DataFrame = Quack.fetch_table('team_feats')
-opp_stats: pd.DataFrame = Quack.fetch_table('opp_feats')
-players: pd.DataFrame = Quack.fetch_table('player_weekly_agg')
+TEAM_RB_STATS: pd.DataFrame = Quack.fetch_table('team_rushers')
+TEAM_QB_STATS: pd.DataFrame = Quack.fetch_table('team_qb_stats')
+TEAM_RECEIVER_STATS: pd.DataFrame = Quack.fetch_table('team_receiver_stats')
+TEAM_STATS: pd.DataFrame = Quack.fetch_table('team_feats')
+OPP_STATS: pd.DataFrame = Quack.fetch_table('opp_feats')
+PLAYERS: pd.DataFrame = Quack.query('''select p.*, adv.stuffed,
+mediocre, explosive, huge_play, 
+first_down, short_first, epa
+from player_weekly_agg as p 
+left join rusher_adv as adv
+on p.gsis_id = adv.gsis_id
+and p.game_id = adv.game_id''')
 
 stat_cols: list[str] = [
 	"completions",
@@ -26,14 +32,11 @@ stat_cols: list[str] = [
 	"passing_2pt_conversions",
 	"passing_yac",
 	"passing_air_yards",
-	"pacr",
 	"carries",
 	"rushing_yards",
 	"rushing_tds",
 	"rushing_fumbles",
 	"rushing_fumbles_lost",
-	"rushing_first_downs",
-	"rushing_epa",
 	"rushing_2pt_conversions",
 	"receptions",
 	"targets",
@@ -47,10 +50,10 @@ stat_cols: list[str] = [
 	"receiving_epa",
 	"receiving_2pt_conversions",
 	"racr",
+	"air_yards",
+	"yac",
 	"target_share",
 	"air_yards_share",
-	"wopr",
-	"special_teams_tds",
 	"fantasy_points",
 	"fantasy_points_ppr",
 ]
@@ -67,14 +70,12 @@ def fetch_row_or_latest(df: pd.DataFrame, team: str, season: int, week: int, opp
 	return row
 
 class Player:
-	def __init__(self, d: pd.Series):
-		self.name: str = d["player_display_name"]
-		self.id: str = d["gsis_id"]
-		self.depth_team: int = int(d["dense_depth"])
+	def __init__(self, player_data: pd.Series):
+		self.name: str = player_data["player_display_name"]
+		self.id: str = player_data["gsis_id"]
+		self.depth_team: int = int(player_data["dense_depth"])
 		self.stats: dict = {x: 0 for x in stat_cols}
-		self.stats["air_yards"] = 0
-		self.stats["yac"] = 0
-		self.features: dict = d.to_dict()
+		self.features: dict = player_data.to_dict()
 
 	def reset_stats(self) -> None:
 		self.stats = {stat_name: 0 for stat_name in self.stats}
@@ -116,9 +117,9 @@ class Player:
 
 
 class QB(Player):
-	def __init__(self, d):  # noqa: F811
-		super().__init__(d)
-		self.features = d.to_dict()
+	def __init__(self, player_data):
+		super().__init__(player_data)
+		self.features = player_data.to_dict()
 		self.position = "QB"
 
 	def __repr__(self) -> str:
@@ -126,10 +127,10 @@ class QB(Player):
 
 
 class RB(Player):
-	def __init__(self, d):
-		super().__init__(d)
+	def __init__(self, player_data):
+		super().__init__(player_data)
 		self.position = "RB"
-		self.features = d.to_dict()
+		self.features = player_data.to_dict()
 
 	def __repr__(self):
 		return (
@@ -138,8 +139,8 @@ class RB(Player):
 
 
 class WR(Player):
-	def __init__(self, d):
-		super().__init__(d)
+	def __init__(self, player_data):
+		super().__init__(player_data)
 		self.position = "WR"
 
 	def __repr__(self) -> str:
@@ -147,8 +148,8 @@ class WR(Player):
 
 
 class TE(Player):
-	def __init__(self, d):
-		super().__init__(d)
+	def __init__(self, player_data):
+		super().__init__(player_data)
 		self.position = "TE"
 
 	def __repr__(self) -> str:
@@ -156,8 +157,8 @@ class TE(Player):
 
 
 class K(Player):
-	def __init__(self, d):
-		super().__init__(d)
+	def __init__(self, player_data):
+		super().__init__(player_data)
 		self.position = "K"
 
 	def __repr__(self) -> str:
@@ -171,29 +172,30 @@ class Team:
 		self.score: int = 0
 		self.plays: int = 0
 		self.features: dict[str, int | str | float] = {"last_rusher_drive": -1, "last_rusher_team": -1}
-		self.team_stats = fetch_row_or_latest(team_stats, self.name, season, week)
-		self.opp_stats = fetch_row_or_latest(opp_stats, self.name, season, week, opp=True)
-		self.roster = players.loc[
-			(players.team == name) & (players.season == season)
+		self.team_stats = fetch_row_or_latest(TEAM_STATS, self.name, season, week)
+		self.opp_stats = fetch_row_or_latest(OPP_STATS, self.name, season, week, opp=True)
+		self.roster = PLAYERS.loc[
+			(PLAYERS.team == name) & (PLAYERS.season == season)
 		]
 		self.roster = self.roster.loc[
 			(self.roster.week == min(self.roster.week.max(), week))
 			#& (self.roster.formation == "Offense")
-			& (self.roster.position.isin(["QB", "WR", "TE", "RB", "K"]))
+			#& (self.roster.position.isin(["QB", "WR", "TE", "RB", "K"]))
 		].sort_values(by="dense_depth")
 
 		self.QBs: list[QB] = self.build_roster_by_position("QB")
 		self.RBs: list[RB] = self.build_roster_by_position("RB")
 		self.WRs: list[WR] = self.build_roster_by_position("WR")
 		self.TEs: list[TE] = self.build_roster_by_position("TE")
+		self.Ks: list[K] = self.build_roster_by_position("K")
 		self.players: list[Player] = self.QBs + self.RBs + self.WRs + self.TEs
-		self.rb_stats: dict[str, str | int | float] = fetch_row_or_latest(team_rb_stats, self.name, season, week)
+		self.rb_stats: dict[str, str | int | float] = fetch_row_or_latest(TEAM_RB_STATS, self.name, season, week)
 
 		self.team_receiver_stats: dict[str, str | int | float] = fetch_row_or_latest(
-			team_receiver_stats, self.name, season, week
+			TEAM_RECEIVER_STATS, self.name, season, week
 		)
 		self.team_qb_stats: dict[str, str | int | float]  = fetch_row_or_latest(
-			team_qb_stats, self.name, season, week
+			TEAM_QB_STATS, self.name, season, week
 		)
 		self.player_dict: dict[str, Player] = {p.id: p for p in self.players}
 	
@@ -202,8 +204,7 @@ class Team:
 
 	def build_roster_by_position(self, position: str):
 		"""Filter players by position and create player objects."""
-		with pd.option_context("future.no_silent_downcasting", True):
-			position_data = self.roster[(self.roster["position"] == position)].fillna(0)
+		position_data = self.roster[(self.roster["position"] == position)].fillna(0)
 		# Create player objects based on position
 		players: list[Player] = []
 		for _, player_data in position_data.iterrows():
@@ -215,6 +216,8 @@ class Team:
 				players.append(QB(player_data))
 			elif position == "TE":
 				players.append(TE(player_data))
+			elif position == 'K':
+				players.append(K(player_data))
 		return players
 
 	def get_depth_pos(self, pos: str, depth: int):
