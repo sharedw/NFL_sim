@@ -16,8 +16,8 @@ def sim_games(team1_name: str, team2_name: str, season:int, week:int, n_games:in
 		game.reset_game()
 
 
-	df =game.game_results(df=True)[['name','team','carries', 'receptions','targets','rushing_yards','receiving_yards']]
-	df = df[df.ne(0).sum(axis=1) > 2] #print only players with stats
-	print(df)
+	#df =game.game_results(df=True)[['name','team','carries', 'receptions','targets','rushing_yards','receiving_yards']]
+	#df = df[df.ne(0).sum(axis=1) > 2] #print only players with stats
+	#print(df)
 	return result
 

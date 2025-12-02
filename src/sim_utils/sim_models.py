@@ -77,7 +77,7 @@ class RushYardsModel(GameModel):
 
     def _load_model(self) -> None:
         model_path: str = "models/run_yards_gained.pt"
-        self.model = maskedModel(n_in=6, n_hidden=128, n_out=140).to(device)
+        self.model = maskedModel(n_in=13, n_hidden=128, n_out=140).to(device)
         self.model.load_state_dict(torch.load(model_path, weights_only=True))
 
 

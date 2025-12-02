@@ -16,3 +16,4 @@ df = df[df.ne(0).sum(axis=1) > 2] #print only players with stats
 print(df)
 
 
+print(t2.Ks)
