@@ -1,10 +1,10 @@
 import duckdb
-
+import pandas as pd
 
 class Quack:
 
     @staticmethod
-    def fetch_table(table_name: str, db_path: str = "data/nfl.duckdb"):
+    def fetch_table(table_name: str, db_path: str = "data/nfl.duckdb") -> pd.DataFrame:
         con = duckdb.connect(db_path)
         try:
             df = con.execute(f"SELECT * FROM {table_name}").fetch_df()
@@ -13,7 +13,7 @@ class Quack:
         return df
 
     @staticmethod
-    def query(query, db_path: str = "data/nfl.duckdb"):
+    def query(query, db_path: str = "data/nfl.duckdb") -> pd.DataFrame:
         con = duckdb.connect(db_path)
         try:
             df = con.execute(query).fetch_df()
@@ -22,7 +22,7 @@ class Quack:
         return df
     
     @staticmethod
-    def file_query(query_file_name,  db_path: str = "data/nfl.duckdb"):
+    def file_query(query_file_name: str,  db_path: str = "data/nfl.duckdb") -> pd.DataFrame:
         con = duckdb.connect(db_path)
         try:
             with open(f"./data/queries/{query_file_name}.sql", "r") as f:
@@ -32,7 +32,7 @@ class Quack:
             con.close()
         return df
     
-    def select_columns(cols:list, alias:str | None=None, coalesce=False):
+    def select_columns(cols:list, alias:str | None=None, coalesce=False) -> str:
 
         if alias:
             temp = (f'{alias}.' + x for x in cols)
