@@ -14,6 +14,7 @@ from player_weekly_agg as p
 left join rusher_adv as adv
 on p.gsis_id = adv.gsis_id
 and p.game_id = adv.game_id''')
+PLAYERS = pd.concat((PLAYERS, Quack.query('select *, player_name as player_display_name from kicker_ratings')))
 
 stat_cols: list[str] = [
 	"completions",
