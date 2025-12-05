@@ -26,7 +26,7 @@ snaps.game_id, snaps.team, snaps.opponent, snaps.offense_snaps, snaps.offense_pc
 join snaps on ids.pfr_id = snaps.pfr_player_id
 )
 select * 
-from base left join snps using(gsis_id, game_id)
+from base left join snps using(gsis_id, game_id, season)
 --where game_id = '2024_04_TEN_MIA'
 --and position = 'QB'
 order by base.season,base.week
