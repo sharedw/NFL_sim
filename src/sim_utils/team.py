@@ -205,7 +205,7 @@ class Team:
 
 	def build_roster_by_position(self, position: str):
 		"""Filter players by position and create player objects."""
-		position_data = self.roster[(self.roster["position"] == position)].fillna(0)
+		position_data = self.roster[(self.roster["position"] == position)].fillna(0.0).infer_objects(copy=False)
 		# Create player objects based on position
 		players: list[Player] = []
 		for _, player_data in position_data.iterrows():
@@ -239,6 +239,10 @@ class Team:
 						return player
 			if pos == "QB":
 				for player in self.QBs:
+					if player.depth_team == depth:
+						return player
+			if pos == "K":
+				for player in self.Ks:
 					if player.depth_team == depth:
 						return player
 			depth -= 1

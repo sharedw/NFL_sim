@@ -21,7 +21,7 @@ where depth.formation = 'Offense'
 ),
 snps as (
 select ids.gsis_id, 
-snaps.game_id, snaps.team, snaps.opponent, snaps.offense_snaps, snaps.offense_pct
+snaps.game_id, snaps.team, snaps.opponent, snaps.offense_snaps, snaps.offense_pct, snaps.season
   from ids
 join snaps on ids.pfr_id = snaps.pfr_player_id
 )

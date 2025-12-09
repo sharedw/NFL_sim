@@ -6,7 +6,7 @@ from sim_utils.config import CONFIG
 from sim_utils.plays import play_registry
 from sim_utils.team import Team
 from sim_utils.play_result import PlayResult
-from sim_utils.sim_models import ClockModel
+from sim_utils.GameModels import ClockModel
 import joblib
 
 CLOCK_MODEL = ClockModel(CONFIG)
