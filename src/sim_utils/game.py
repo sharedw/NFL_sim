@@ -144,7 +144,6 @@ class GameState:
 		return play_type
 	
 	def update_game_state(self, team: Team,  play_result: PlayResult):
-		#TODO Move this to the gamestate class
 		#self.clock -= 25
 		assert play_result.play_type is not None
 
@@ -221,8 +220,14 @@ class GameState:
 
 	def log_play(self, play_result: PlayResult) -> dict:
 		"""Logs the context of the game state at each play."""
-		play_log = play_result.to_dict()
-		play_log.update(self.game_context)
+		"""play_data = {
+			"play_type": play_result.play_type,
+			"yards_gained": play_result.yards,
+			"player": play_result.get('rusher', play_result.get('receiver',0)),
+			"play_time_elapsed": 'play_time_elapsed'
+		}"""
+		play_result.to_dict().update(self.game_context)
+		play_log = play_result
 		self.pbp.append(play_log)
 		return play_log
 

@@ -27,17 +27,8 @@ COMPLETE_PASS_MODEL = joblib.load("models/complete_pass.joblib")
 
 
 class Play(ABC):
-	def __init__(self):
-		self.clock_cols = CONFIG["clock_cols"]  # TODO: doesn't belong here tbh
-		self.play_context = {}
-		self.play_type = None
-		self.play_data = {
-			"incomplete_pass": 0,
-			"out_of_bounds": 0,
-			"player": None,
-			"timeout": 0,
-			"sp": 0,
-		}
+    def __init__(self):
+        self.play_type = None
 
 	@abstractmethod
 	def execute_play(self, team: Team, game_context: dict) -> PlayResult:
@@ -56,15 +47,14 @@ class Play(ABC):
 			play_result.out_of_bounds = bool(oob)
 		return play_result
 
-	def collect_features(self, *argv) -> dict:
-		# TODO pass game context features directly
-		features = {}
-		for arg in argv:
-			if isinstance(arg, PlayResult):
-				features.update(arg.to_dict())
-			else:
-				features.update(arg)
-		return features
+    def collect_features(self, *argv) -> dict:
+        features = {}
+        for arg in argv:
+            if isinstance(arg, PlayResult):
+                features.update(arg.to_dict())
+            else:
+                features.update(arg)
+        return features
 
 
 class RunPlay(Play):
@@ -92,13 +82,12 @@ class RunPlay(Play):
 		sample = RUSH_YARDS_MODEL.predict(raw_features)
 		return min((sample, raw_features["yardline_100"]))
 
-	def update_player_stats(self, team: Team, play_result: PlayResult):
-		assert play_result.rusher_id is not None
-		player = team.get_player_by_id(play_result.rusher_id)
-		player.carries += 1
-		player.rushing_yards += play_result.yards
-		# self.game.player = self.player.name #TODO make sure this goes somewhere
-		return
+    def update_player_stats(self, team: Team, play_result: PlayResult):
+        assert play_result.rusher_id is not None
+        player = team.get_player_by_id(play_result.rusher_id)
+        player.carries += 1
+        player.rushing_yards += play_result.yards
+        return
 
 	def execute_play(self, team: Team, game_context: dict):
 		rusher = self.choose_rusher(team, game_context)
@@ -128,18 +117,17 @@ class PassPlay(Play):
 		if air_yards >= game_context["yardline_100"]:  # touchdown at catch
 			return game_context["yardline_100"], 0
 
-		raw_features["air_yards"] = air_yards
-		raw_features["catch_yardline"] = game_context["yardline_100"] - air_yards
-		is_td = air_yards >= game_context["yardline_100"]
-		raw_features["air_fd"] = air_yards >= game_context["ydstogo"]
-		raw_features["air_td"] = is_td
-		if is_td:
-			yac = 0
-		else:
-			yac = YAC_MODEL.predict(raw_features)
-			yac = min(yac, (game_context["yardline_100"] - air_yards))
-		self.play_context.update({"air_yards": air_yards, "yac": yac})
-		return air_yards, yac
+        raw_features["air_yards"] = air_yards
+        raw_features["catch_yardline"] = game_context["yardline_100"] - air_yards
+        is_td = air_yards >= game_context["yardline_100"]
+        raw_features["air_fd"] = air_yards >= game_context["ydstogo"]
+        raw_features["air_td"] = is_td
+        if is_td:
+            yac = 0
+        else:
+            yac = YAC_MODEL.predict(raw_features)
+            yac = min(yac, (game_context["yardline_100"] - air_yards))
+        return air_yards, yac
 
 	def sample_completion(self, qb, receiver, team, air_yards, game_context):
 		raw_features = self.collect_features(
@@ -164,25 +152,23 @@ class PassPlay(Play):
 		receiver = team.get_depth_pos(pos, int(depth))
 		return receiver
 
-	def update_player_stats(self, team: Team, play_result: PlayResult):
-		assert play_result.passer_id is not None
-		assert play_result.receiver_id is not None
-		passer = team.get_player_by_id(play_result.passer_id)
-		receiver = team.get_player_by_id(
-			play_result.receiver_id
-		)  # TODO THIS LOOKS WEIRD NOW
-		passer.attempts += 1
-		receiver.targets += 1
-		if play_result.complete_pass:
-			passer.completions += 1
-			receiver.receptions += 1
-			receiver.air_yards += play_result.air_yards
-			receiver.yac += play_result.yac
-			receiver.receiving_yards += play_result.yards
-			passer.passing_yards += play_result.yards
-			passer.passing_air_yards += play_result.air_yards
-			passer.passing_yac += play_result.yac
-		return
+    def update_player_stats(self, team: Team, play_result: PlayResult):
+        assert play_result.passer_id is not None
+        assert play_result.receiver_id is not None
+        passer = team.get_player_by_id(play_result.passer_id)
+        receiver = team.get_player_by_id(play_result.receiver_id)
+        passer.attempts += 1
+        receiver.targets += 1
+        if play_result.complete_pass:
+            passer.completions += 1
+            receiver.receptions += 1
+            receiver.air_yards += play_result.air_yards
+            receiver.yac += play_result.yac
+            receiver.receiving_yards += play_result.yards
+            passer.passing_yards += play_result.yards
+            passer.passing_air_yards += play_result.air_yards
+            passer.passing_yac += play_result.yac
+        return
 
 	def execute_play(self, team: Team, game_context: dict) -> PlayResult:
 		passer = team.QBs[0]
