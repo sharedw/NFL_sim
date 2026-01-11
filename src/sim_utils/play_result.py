@@ -13,19 +13,21 @@ class PlayResult:
     # Optional fields with defaults
     rusher: Optional[object] = None
     rusher_id: Optional[str] = None
-    rusher_name: Optional[str] = None
+    #rusher_name: Optional[str] = None
     
     receiver: Optional[object] = None
     receiver_id: Optional[str] = None
-    receiver_name: Optional[str] = None
+    #receiver_name: Optional[str] = None
 
     passer: Optional[object] = None
-    passer_id: Optional[str] = None
-    passer_name: Optional[str] = None
+    passer_id: Optional[str] = None  
+    #passer_name: Optional[str] = None
 
     kicker: Optional[object] = None
     kicker_id: Optional[str] = None
-    kicker_name: Optional[str] = None
+    #kicker_name: Optional[str] = None
+    field_goal_result: Optional[int] = None
+    kick_distance: Optional[int] = None
     # Play outcome booleans
     incomplete_pass: int = 0
     complete_pass: int = 0

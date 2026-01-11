@@ -1,4 +1,4 @@
-from time import time
+from time import time 
 import pandas as pd
 import random
 import numpy as np
@@ -6,7 +6,7 @@ from sim_utils.config import CONFIG
 from sim_utils.plays import play_registry
 from sim_utils.team import Team
 from sim_utils.play_result import PlayResult
-from sim_utils.sim_models import ClockModel
+from sim_utils.GameModels import ClockModel
 import joblib
 
 CLOCK_MODEL = ClockModel(CONFIG)
@@ -38,7 +38,7 @@ class GameState:
 		self.defending = self.away
 		self.down = 1
 		self.ydstogo = 10
-		self.ball_position = 65  # Yardline (0-100), 0 is score, 100 is safety
+		self.ball_position: int = 65  # Yardline (0-100), 0 is score, 100 is safety
 		self.clock = 900  # Seconds in the current quarter (15 mins = 900 seconds)
 		self.drive = 0
 		self.pbp = []
@@ -48,7 +48,7 @@ class GameState:
 		self.home.reset_stats()
 		self.away.reset_stats()
 
-	def switch_poss(self):
+	def switch_poss(self) -> None:
 		self.possession.features["last_rusher_drive"] = -1
 		self.possession = self.away if self.possession == self.home else self.home
 		self.defending = self.possession.opponent
@@ -123,7 +123,7 @@ class GameState:
 	def call_play(self, team: Team, game_context: dict) -> str:
 		"""This uses an XGBoost model to predict what play type will be ran next."""
 		assert team.opponent is not None
-		raw_features: list[dict] = self.collect_features(
+		raw_features = self.collect_features(
 			team.team_stats,
 			team.opponent.opp_stats,
 			game_context
@@ -212,14 +212,13 @@ class GameState:
 			self.clock -= play_duration
 		self.game_context = self.get_game_state()
 		play_result = self.play_functions[play_type].orchestrate(team, self.game_context)
-		#print(play_result)
 		self.update_game_state(team, play_result)
 		self.last_play = play_result
-		self.log_play(self.game_context, play_result)
+		self.log_play(play_result)
 		return 
 
 
-	def log_play(self, game_context, play_result):
+	def log_play(self, play_result: PlayResult) -> dict:
 		"""Logs the context of the game state at each play."""
 		"""play_data = {
 			"play_type": play_result.play_type,
@@ -230,7 +229,7 @@ class GameState:
 		play_result.to_dict().update(self.game_context)
 		play_log = play_result
 		self.pbp.append(play_log)
-		return play_result
+		return play_log
 
 	def td_check(self, team):
 		if self.ball_position <= 0:
@@ -277,7 +276,7 @@ class GameState:
 		else:
 			print(f"{self.away.name} has won {self.away.score} - {self.home.score}")
 
-	def game_results(self, df=False):
+	def game_results(self, df=False) -> pd.DataFrame | dict:
 		res1 = self.home.game_results(self.game_id,df=False)
 		res2 = self.away.game_results(self.game_id,df=False)
 		res = res1 + res2

@@ -2,23 +2,13 @@ import joblib
 import torch
 from sim_utils.modeling import maskedModel, maskedModelYac
 from abc import ABC, abstractmethod
-import yaml
 import numpy as np
 
 with open("models/feature_config.yaml", "r") as file:
-    CONFIG = yaml.safe_load(file)
+	CONFIG = yaml.safe_load(file)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = "cpu"
-
-#CLOCK_MODEL = joblib.load("models/clock_model.joblib")
-
-CHOOSE_RUSHER_MODEL = joblib.load("models/choose_rusher.joblib")
-
-CHOOSE_RECEIVER_MODEL = joblib.load("models/choose_receiver.joblib")
-
-COMPLETE_PASS_MODEL = joblib.load("models/complete_pass.joblib")
-
 
 class GameModel(ABC):
     def __init__(self, feature_cols):
@@ -32,7 +22,7 @@ class GameModel(ABC):
         pass
     
     @abstractmethod
-    def predict(self, features):
+    def predict(self, input):
         """Make prediction - must be implemented by subclass"""
         pass
     
@@ -52,14 +42,13 @@ class GameModel(ABC):
             return input
 
 class ChooseRusherModel(GameModel):
-    """returns position and depth of rusher"""
-    def __init__(self, config):
-        super().__init__(config["choose_rusher_cols"])
-        self._load_model()
-        self.model_name = 'ChooseRusherModel'
+	"""returns position and depth of rusher"""
+	def __init__(self, config):
+		super().__init__(config["choose_rusher_cols"])
+		self._load_model()
 
-    def _load_model(self) -> None:
-        self.model = joblib.load("models/choose_rusher.joblib")
+	def _load_model(self) -> None:
+		self.model = joblib.load("models/choose_rusher.joblib")
 
     def predict(self, input: dict) -> int:
         features = self._fetch_model_input(input)
@@ -77,7 +66,7 @@ class RushYardsModel(GameModel):
 
     def _load_model(self) -> None:
         model_path: str = "models/run_yards_gained.pt"
-        self.model = maskedModel(n_in=6, n_hidden=64, n_out=140).to(device)
+        self.model = maskedModel(n_in=13, n_hidden=128, n_out=140).to(device)
         self.model.load_state_dict(torch.load(model_path, weights_only=True))
 
 
@@ -88,7 +77,7 @@ class RushYardsModel(GameModel):
         with torch.no_grad():
             preds = self.model(x.reshape(1, -1))[0]
             preds = torch.softmax(preds, 0)
-        sample = (torch.multinomial(preds, 1)).item() - 40
+        sample = int(torch.multinomial(preds, 1).item()) - 40
         return sample
 
 class AirYardsModel(GameModel):
@@ -111,22 +100,21 @@ class AirYardsModel(GameModel):
         with torch.no_grad():
             preds = self.model(x.reshape(1, -1))[0]
             preds = torch.softmax(preds, 0)
-        sample = (torch.multinomial(preds, 1)).item() - 40
+        sample = int(torch.multinomial(preds, 1).item()) - 40
         return sample
     
 
 
 class YacModel(GameModel):
-    """returns yards gained"""
-    def __init__(self, config):
-        super().__init__(config["yac_cols"])
-        self._load_model()
-        self.model_name = 'YacModel'
+	"""returns yards gained"""
+	def __init__(self, config):
+		super().__init__(config["yac_cols"])
+		self._load_model()
 
-    def _load_model(self) -> None:
-        model_path = "models/yac.pt"
-        self.model = maskedModelYac(n_in=26, n_hidden=256, n_out=140).to(device)
-        self.model.load_state_dict(torch.load(model_path, weights_only=True))
+	def _load_model(self) -> None:
+		model_path = "models/yac.pt"
+		self.model = maskedModelYac(n_in=26, n_hidden=256, n_out=140).to(device)
+		self.model.load_state_dict(torch.load(model_path, weights_only=True))
 
 
     def predict(self, input: dict) -> int:
@@ -136,7 +124,7 @@ class YacModel(GameModel):
         with torch.no_grad():
             preds = self.model(x.reshape(1, -1))[0]
             preds = torch.softmax(preds, 0)
-        sample = (torch.multinomial(preds, 1)).item() - 40
+        sample = int(torch.multinomial(preds, 1).item()) - 40
         return sample
     
 class OOBModel(GameModel):
@@ -174,3 +162,22 @@ class ClockModel(GameModel):
         features = self._fetch_model_input(input, ignore_missing=True)
         duration = self.model.predict([features])[0]
         return duration
+    
+
+class FieldGoalModel(GameModel):
+    """returns position and depth of rusher"""
+    def __init__(self, config):
+        super().__init__(config["fg_cols"])
+        self._load_model()
+
+    def _load_model(self) -> None:
+        self.model = joblib.load("models/fg_model.joblib")
+
+    def predict(self, input: dict) -> int:
+        input['kick_distance'] = input['yardline_100'] + 10
+        input['distance_sq'] = (input['kick_distance']) ** 2
+        input: list = self._fetch_model_input(input)
+        preds = self.model.predict_proba([input])
+        result = np.random.choice(len(preds[0]), p=preds[0])
+        return result
+    

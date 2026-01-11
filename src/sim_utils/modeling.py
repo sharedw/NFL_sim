@@ -163,13 +163,13 @@ class maskedModelYac(nn.Module):
 
 
 
-def create_model(df, x_cols, y_col, colsample_bytree=0.5):
+def create_model(df, x_cols, y_col, colsample_bytree=0.5, categorical=False) -> xgb.XGBClassifier:
     data = df.loc[~(df[y_col].isna())].copy(deep=True)
     X, y = data[x_cols], data[y_col]
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
-    model = xgb.XGBClassifier(eval_metric="mlogloss", colsample_bytree=colsample_bytree, missing=np.nan)
+    model = xgb.XGBClassifier(eval_metric="mlogloss", colsample_bytree=colsample_bytree, missing=np.nan, enable_categorical=True)
     model.fit(X_train, y_train)
 
     y_pred = model.predict(X_test)

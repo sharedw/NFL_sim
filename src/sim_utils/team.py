@@ -26,14 +26,11 @@ stat_cols: list[str] = [
 	"passing_2pt_conversions",
 	"passing_yac",
 	"passing_air_yards",
-	"pacr",
 	"carries",
 	"rushing_yards",
 	"rushing_tds",
 	"rushing_fumbles",
 	"rushing_fumbles_lost",
-	"rushing_first_downs",
-	"rushing_epa",
 	"rushing_2pt_conversions",
 	"receptions",
 	"targets",
@@ -47,10 +44,10 @@ stat_cols: list[str] = [
 	"receiving_epa",
 	"receiving_2pt_conversions",
 	"racr",
+	"air_yards",
+	"yac",
 	"target_share",
 	"air_yards_share",
-	"wopr",
-	"special_teams_tds",
 	"fantasy_points",
 	"fantasy_points_ppr",
 ]
@@ -70,14 +67,12 @@ def fetch_row_or_latest(
 
 
 class Player:
-	def __init__(self, d: pd.Series):
-		self.name: str = d["player_display_name"]
-		self.id: str = d["gsis_id"]
-		self.depth_team: int = int(d["dense_depth"])
+	def __init__(self, player_data: pd.Series):
+		self.name: str = player_data["player_display_name"]
+		self.id: str = player_data["gsis_id"]
+		self.depth_team: int = int(player_data["dense_depth"])
 		self.stats: dict = {x: 0 for x in stat_cols}
-		self.stats["air_yards"] = 0
-		self.stats["yac"] = 0
-		self.features: dict = d.to_dict()
+		self.features: dict = player_data.to_dict()
 
 	def reset_stats(self) -> None:
 		self.stats = {stat_name: 0 for stat_name in self.stats}
@@ -118,9 +113,9 @@ class Player:
 
 
 class QB(Player):
-	def __init__(self, d):  # noqa: F811
-		super().__init__(d)
-		self.features = d.to_dict()
+	def __init__(self, player_data):
+		super().__init__(player_data)
+		self.features = player_data.to_dict()
 		self.position = "QB"
 
 	def __repr__(self) -> str:
@@ -128,10 +123,10 @@ class QB(Player):
 
 
 class RB(Player):
-	def __init__(self, d):
-		super().__init__(d)
+	def __init__(self, player_data):
+		super().__init__(player_data)
 		self.position = "RB"
-		self.features = d.to_dict()
+		self.features = player_data.to_dict()
 
 	def __repr__(self):
 		return (
@@ -140,8 +135,8 @@ class RB(Player):
 
 
 class WR(Player):
-	def __init__(self, d):
-		super().__init__(d)
+	def __init__(self, player_data):
+		super().__init__(player_data)
 		self.position = "WR"
 
 	def __repr__(self) -> str:
@@ -149,8 +144,8 @@ class WR(Player):
 
 
 class TE(Player):
-	def __init__(self, d):
-		super().__init__(d)
+	def __init__(self, player_data):
+		super().__init__(player_data)
 		self.position = "TE"
 
 	def __repr__(self) -> str:
@@ -158,8 +153,8 @@ class TE(Player):
 
 
 class K(Player):
-	def __init__(self, d):
-		super().__init__(d)
+	def __init__(self, player_data):
+		super().__init__(player_data)
 		self.position = "K"
 
 	def __repr__(self) -> str:
@@ -190,13 +185,14 @@ class Team:
 		self.RBs: list[RB] = self.build_roster_by_position("RB")
 		self.WRs: list[WR] = self.build_roster_by_position("WR")
 		self.TEs: list[TE] = self.build_roster_by_position("TE")
+		self.Ks: list[K] = self.build_roster_by_position("K")
 		self.players: list[Player] = self.QBs + self.RBs + self.WRs + self.TEs
 		self.rb_stats: dict[str, str | int | float] = fetch_row_or_latest(
 			team_rb_stats, self.name, season, week
 		)
 
 		self.team_receiver_stats: dict[str, str | int | float] = fetch_row_or_latest(
-			team_receiver_stats, self.name, season, week
+			TEAM_RECEIVER_STATS, self.name, season, week
 		)
 		self.team_qb_stats: dict[str, str | int | float] = fetch_row_or_latest(
 			team_qb_stats, self.name, season, week
@@ -226,6 +222,8 @@ class Team:
 				players.append(QB(player_data))
 			elif position == "TE":
 				players.append(TE(player_data))
+			elif position == 'K':
+				players.append(K(player_data))
 		return players
 
 	def get_depth_pos(self, pos: str, depth: int) -> QB | WR | TE | RB:
