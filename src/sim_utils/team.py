@@ -175,7 +175,7 @@ class K(Player):
 
 
 class Team:
-        def __init__(self, name: str, season: int, week: int, use_current_injuries=False):
+    def __init__(self, name: str, season: int, week: int, use_current_injuries=False):
         self.name: str = name
         self.opponent: Team | None = None
         self.spread_line: int = 0
