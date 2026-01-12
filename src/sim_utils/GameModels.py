@@ -79,6 +79,7 @@ class RushYardsModel(GameModel):
         features = self._fetch_model_input(input)
         x = torch.tensor(features).float().to(device)
         with torch.no_grad():
+            assert x[0] < 140, f"why are you past the endzone, {x}"
             preds = self.model(x.reshape(1, -1))[0]
             preds = torch.softmax(preds, 0)
         sample = int(torch.multinomial(preds, 1).item()) - 40
