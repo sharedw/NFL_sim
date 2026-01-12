@@ -13,7 +13,7 @@ from sim_utils.GameModels import (
 )
 from sim_utils.team import Team, Player
 from sim_utils.play_result import PlayResult
-
+from sim_utils.GameState import GameStateDict
 RUSH_YARDS_MODEL = RushYardsModel(CONFIG)
 AIR_YARDS_MODEL = AirYardsModel(CONFIG)
 YAC_MODEL = YacModel(CONFIG)
@@ -31,15 +31,15 @@ class Play(ABC):
         self.play_type = None
 
     @abstractmethod
-    def execute_play(self, team: Team, game_context: dict) -> PlayResult:
+    def execute_play(self, team: Team, game_context: GameStateDict) -> PlayResult:
         raise NotImplementedError
 
-    def sample_oob(self, game_context, play_result) -> int:
+    def sample_oob(self, game_context: GameStateDict, play_result: PlayResult) -> int:
         raw_features = self.collect_features(game_context, play_result)
         oob = OOB_MODEL.predict(raw_features)
         return oob
 
-    def orchestrate(self, team: Team, game_context: dict) -> PlayResult:
+    def orchestrate(self, team: Team, game_context: GameStateDict) -> PlayResult:
         play_result = self.execute_play(team, game_context)
         play_result.play_type = self.play_type
         if play_result.play_type in ["pass", "run"]:
@@ -64,7 +64,7 @@ class RunPlay(Play):
         self.rusher_idx_to_pos = CONFIG["rusher_idx_to_pos"]
         self.rush_yard_cols = CONFIG["rush_yard_cols"]
 
-    def choose_rusher(self, team, game_context) -> Player:
+    def choose_rusher(self, team, game_context: GameStateDict) -> Player:
         raw_features = self.collect_features(
             team.rb_stats, team.features, team.opponent.opp_stats, game_context
         )
@@ -89,7 +89,7 @@ class RunPlay(Play):
         player.rushing_yards += play_result.yards
         return
 
-    def execute_play(self, team: Team, game_context: dict):
+    def execute_play(self, team: Team, game_context: GameStateDict):
         rusher = self.choose_rusher(team, game_context)
         yds = self.sample_run_yards(team, game_context, rusher)
         yds = min(yds, game_context["yardline_100"])
@@ -109,11 +109,12 @@ class PassPlay(Play):
         self.receiver_idx_to_pos: list[str] = CONFIG["receiver_idx_to_pos"]
         self.complete_pass_cols: list[str] = CONFIG["complete_pass_cols"]
 
-    def sample_air_and_yac(self, team, player, game_context):
+    def sample_air_and_yac(self, team: Team, player: Player, game_context: GameStateDict) -> tuple[int, int]:
+        assert team.opponent is not None
         raw_features = self.collect_features(
             player.features, team.team_stats, team.opponent.opp_stats, game_context
         )
-        air_yards: int = AIR_YARDS_MODEL.predict(raw_features)
+        air_yards = AIR_YARDS_MODEL.predict(raw_features) 
         if air_yards >= game_context["yardline_100"]:  # touchdown at catch
             return game_context["yardline_100"], 0
 
@@ -129,7 +130,7 @@ class PassPlay(Play):
             yac = min(yac, (game_context["yardline_100"] - air_yards))
         return air_yards, yac
 
-    def sample_completion(self, qb, receiver, team, air_yards, game_context):
+    def sample_completion(self, qb, receiver, team, air_yards, game_context: GameStateDict):
         raw_features = self.collect_features(
             receiver.features, team.team_stats, team.opponent.opp_stats, game_context
         )
@@ -141,7 +142,7 @@ class PassPlay(Play):
         receiver_idx = np.random.choice(len(preds[0]), p=preds[0])
         return receiver_idx
 
-    def get_receiver(self, team: Team, game_context: dict):
+    def get_receiver(self, team: Team, game_context: GameStateDict):
         raw_features = self.collect_features(
             team.team_receiver_stats, team.features, game_context
         )
@@ -170,7 +171,7 @@ class PassPlay(Play):
             passer.passing_yac += play_result.yac
         return
 
-    def execute_play(self, team: Team, game_context: dict) -> PlayResult:
+    def execute_play(self, team: Team, game_context: GameStateDict) -> PlayResult:
         passer = team.QBs[0]
         receiver = self.get_receiver(team, game_context)
 
@@ -204,7 +205,7 @@ class FieldGoal(Play):
         super().__init__()
         self.play_type = "field_goal"
 
-    def sample_result(self, team, game_context) -> int:
+    def sample_result(self, team, game_context: GameStateDict) -> int:
         self.player = team.get_depth_pos("K", 0)
         kick_features = {
             "kicker_rating": self.player.kicker_rating,
@@ -226,7 +227,7 @@ class FieldGoal(Play):
         kicker = "dork"  # team.get_player_by_id(play_result['passer_id']) #noqa
         return
 
-    def execute_play(self, team: Team, game_context: dict):
+    def execute_play(self, team: Team, game_context: GameStateDict):
         success = self.sample_result(team, game_context)
         play_result = PlayResult(
             yards=0,
@@ -244,7 +245,7 @@ class Punt(Play):
         super().__init__()
         self.play_type = "punt"
 
-    def execute_play(self, team: Team, game_context: dict):
+    def execute_play(self, team: Team, game_context: GameStateDict):
         play_result = PlayResult(yards=0)
         self.update_game_state(team, play_result)
         return play_result
@@ -258,7 +259,7 @@ class Kickoff(Play):
         super().__init__()
         self.play_type = "kickoff"
 
-    def execute_play(self, team: Team, game_context: dict) -> PlayResult:
+    def execute_play(self, team: Team, game_context: GameStateDict) -> PlayResult:
         play_result = PlayResult(yards=0)
         self.update_game_state(team, play_result)
         return play_result
@@ -272,10 +273,10 @@ class Kneel(Play):
         super().__init__()
         self.play_type = "qb_kneel"
 
-    def update_player_stats(self, team, game_context):
+    def update_player_stats(self, team, game_context: GameStateDict):
         pass
 
-    def execute_play(self, team: Team, game_context: dict) -> PlayResult:
+    def execute_play(self, team: Team, game_context: GameStateDict) -> PlayResult:
         # Implementation of qb kneel play
         # print("QB kneel executed.")
         return PlayResult(yards=0)
@@ -286,10 +287,10 @@ class Spike(Play):
         super().__init__()
         self.play_type = "qb_spike"
 
-    def update_player_stats(self, team, game_context):
+    def update_player_stats(self, team, game_context: GameStateDict):
         pass
 
-    def execute_play(self, team: Team, game_context: dict) -> PlayResult:
+    def execute_play(self, team: Team, game_context: GameStateDict) -> PlayResult:
         # Implementation of qb spike play
         # print("QB spike executed.")
         return PlayResult(yards=0)
@@ -300,7 +301,7 @@ class PosTimeout(Play):
         super().__init__()
         self.play_type = "pos_timeout"
 
-    def execute_play(self, team: Team, game_context: dict):
+    def execute_play(self, team: Team, game_context: GameStateDict):
         # print(f"TIMEOUT! {self.game.possession.timeouts} remaining")
         return {"yards": 0}
 
@@ -310,7 +311,7 @@ class DefTimeout(Play):
         super().__init__()
         self.play_type = "def_timeout"
 
-    def execute_play(self, team: Team, game_context: dict):
+    def execute_play(self, team: Team, game_context: GameStateDict):
         # print(f"def TIMEOUT!, {self.game.defending.timeouts} remaining")
         return {"yards": 0}
 

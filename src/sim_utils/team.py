@@ -1,3 +1,4 @@
+from __future__ import annotations
 import pandas as pd
 from utils.quack import Quack
 
@@ -177,6 +178,8 @@ class Team:
     def __init__(self, name: str, season: int, week: int, use_current_injuries=False):
         self.name: str = name
         self.opponent: Team | None = None
+        self.spread_line: int = 0
+        self.timeouts: int = 0
         self.score: int = 0
         self.plays: int = 0
         self.features: dict[str, int | str | float] = {

@@ -1,8 +1,11 @@
+from __future__ import annotations
+from sim_utils.GameState import GameStateDict
 from time import time 
 import pandas as pd
 import random
 import numpy as np
 from sim_utils.config import CONFIG
+from utils.quack import Quack
 from sim_utils.plays import play_registry
 from sim_utils.team import Team
 from sim_utils.play_result import PlayResult
@@ -12,10 +15,10 @@ import joblib
 CLOCK_MODEL = ClockModel(CONFIG)
 
 class GameState:
-	def __init__(self, away, home, **kwargs):
+	def __init__(self, away: Team, home: Team, **kwargs):
 		#self.event_log = EventLog()
-		self.home = home
-		self.away = away
+		self.home: Team = home
+		self.away: Team = away
 		home.opponent = self.away
 		away.opponent = self.home
 		home.spread_line = kwargs.get("spread_line", -3)
@@ -31,11 +34,13 @@ class GameState:
 		self.last_play = PlayResult()
 		self.reset_game()
 		self.game_context = self.get_game_state()
+		assert home.opponent is not None
+		assert away.opponent is not None
 
 	def reset_game(self):
 		self.quarter = 1
-		self.possession = self.home
-		self.defending = self.away
+		self.possession: Team = self.home
+		self.defending: Team = self.away
 		self.down = 1
 		self.ydstogo = 10
 		self.ball_position: int = 65  # Yardline (0-100), 0 is score, 100 is safety
@@ -51,7 +56,7 @@ class GameState:
 	def switch_poss(self) -> None:
 		self.possession.features["last_rusher_drive"] = -1
 		self.possession = self.away if self.possession == self.home else self.home
-		self.defending = self.possession.opponent
+		self.defending: Team = self.possession.opponent
 		self.ball_position = 100 - min(self.ball_position, 99)
 		self.down = 1
 		self.ydstogo = min(10, self.ball_position)
@@ -59,8 +64,8 @@ class GameState:
 		return
 
 	def start_game(self):
-		self.lost_kickoff = random.choice((self.home, self.away))
-		self.possession = self.lost_kickoff
+		self.lost_kickoff: Team = random.choice((self.home, self.away))
+		self.possession: Team = self.lost_kickoff
 		self.sim_one_play(self.possession, kickoff=True)
 
 
@@ -93,7 +98,7 @@ class GameState:
 		play_duration = CLOCK_MODEL.predict(raw_features)
 		return min(max(0, int(play_duration)), 60)
 
-	def get_game_state(self) -> dict:
+	def get_game_state(self) -> GameStateDict:
 		"""Fetches the current context of the game state. Can be used as model input or for logging"""
 		return {
 			"possession": self.possession.name,
@@ -120,7 +125,7 @@ class GameState:
 			"defteam_timeouts_remaining": self.defending.timeouts,
 		}
 
-	def call_play(self, team: Team, game_context: dict) -> str:
+	def call_play(self, team: Team, game_context: GameStateDict) -> str:
 		"""This uses an XGBoost model to predict what play type will be ran next."""
 		assert team.opponent is not None
 		raw_features = self.collect_features(
@@ -218,7 +223,7 @@ class GameState:
 		return 
 
 
-	def log_play(self, play_result: PlayResult) -> dict:
+	def log_play(self, play_result: PlayResult) -> PlayResult:
 		"""Logs the context of the game state at each play."""
 		"""play_data = {
 			"play_type": play_result.play_type,
@@ -265,7 +270,7 @@ class GameState:
 		# print(f"{self.home.name}:{self.home.score}")
 		# print(f"{self.away.name}:{self.away.score}")
 
-	def play_game(self):
+	def play_game(self, save_results: bool=False):
 		self.reset_game()
 		self.start_game()
 		while self.quarter <= 4:
@@ -275,6 +280,17 @@ class GameState:
 			print(f"{self.home.name} has won {self.home.score} - {self.away.score}")
 		else:
 			print(f"{self.away.name} has won {self.away.score} - {self.home.score}")
+		if save_results:
+			df = self.game_results(df=True) #noqa
+			Quack.query("""
+				CREATE TABLE IF NOT EXISTS sim_results AS
+				SELECT * FROM df WHERE 1=0
+				""")
+			Quack.query("""
+				INSERT INTO results
+				SELECT * FROM df
+				""")
+
 
 	def game_results(self, df=False) -> pd.DataFrame | dict:
 		res1 = self.home.game_results(self.game_id,df=False)
