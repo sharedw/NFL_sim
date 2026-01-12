@@ -143,10 +143,14 @@ print(pbp[clock_y].max(),pbp[clock_y].min())
 clock_model = create_reg_model(pbp, clock_x, clock_y)
 
 print("clock model created..")
-joblib.dump(clock_model, "models/clock_model.joblib")
+model_path = "models/clock_model.joblib"
+joblib.dump(clock_model, model_path)
 
 feature_config = {
-    "clock_cols": clock_x,
+	'clock_model':{
+    "feature_cols": clock_x,
+	'model_path': model_path
+}
 }
 update_config(feature_config)
 print("clock model saved.")
@@ -177,12 +181,16 @@ data[x_cols] = data.groupby("game_id")[x_cols].ffill(limit=1)
 data = data.loc[~data.play_type_enc.isna()]
 print(data['play_type_enc'].unique())
 play_type_model = create_model(data, x_cols, y_col[0], colsample_bytree=0.8)
-joblib.dump(play_type_model, "models/run_or_pass.joblib")
+model_path = "models/run_or_pass.joblib"
+joblib.dump(play_type_model, model_path)
 
 feature_config = {
-    "run_or_pass_cols": x_cols,
+	'run_or_pass_model':{
+    "feature_cols": x_cols,
     "play_decoding": {k: v for v, k in play_type_mapping.items()},
-    "play_encoding": play_type_mapping
+    "play_encoding": play_type_mapping,
+	'model_path': model_path
+}
 }
 update_config(feature_config)
 print("play type model saved.")
