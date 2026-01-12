@@ -175,7 +175,7 @@ class K(Player):
 
 
 class Team:
-    def __init__(self, name: str, season: int, week: int, use_current_injuries=False):
+        def __init__(self, name: str, season: int, week: int, use_current_injuries=False):
         self.name: str = name
         self.opponent: Team | None = None
         self.spread_line: int = 0
@@ -196,6 +196,8 @@ class Team:
             # & (self.roster.formation == "Offense")
             # & (self.roster.position.isin(["QB", "WR", "TE", "RB", "K"]))
         ].sort_values(by="dense_depth")
+        num_cols = self.roster.select_dtypes(include='number').columns
+        self.roster[num_cols] = self.roster[num_cols].fillna(0.0)
 
         self.QBs: list[QB] = self.build_roster_by_position("QB")
         self.RBs: list[RB] = self.build_roster_by_position("RB")
@@ -220,11 +222,10 @@ class Team:
 
     def build_roster_by_position(self, position: str):
         """Filter players by position and create player objects."""
-        position_data = (
-            self.roster[(self.roster["position"] == position)]
-            .fillna(0.0)
-            .infer_objects(copy=False)
-        )
+        
+        
+        position_data = self.roster[(self.roster["position"] == position)]
+
         # Create player objects based on position
         players: list[Player] = []
         for _, player_data in position_data.iterrows():
