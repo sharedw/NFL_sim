@@ -1,9 +1,11 @@
 from typing import TypedDict
 
 class GameStateDict(TypedDict):
-    possession: str
+    team: str
+    opp: str
     quarter: int
     down: int
+    drive: int
     is_first_down: bool
     ydstogo: int
     goal_to_go: int
@@ -18,7 +20,6 @@ class GameStateDict(TypedDict):
     quarter_seconds_remaining: int
     half_seconds_remaining: int
     game_seconds_remaining: int
-    drive: int
     spread_line: int
     total_line: int
     posteam_timeouts_remaining: int

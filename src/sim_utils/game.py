@@ -101,9 +101,11 @@ class GameState:
 	def get_game_state(self) -> GameStateDict:
 		"""Fetches the current context of the game state. Can be used as model input or for logging"""
 		return {
-			"possession": self.possession.name,
+			"team": self.possession.name,
+			"opp": self.defending.name,
 			"quarter": self.quarter,
 			"down": self.down,
+			"drive": self.drive,
 			"is_first_down": self.down == 1,
 			"ydstogo": self.ydstogo,
 			"goal_to_go": int(self.ball_position < 10),
@@ -118,7 +120,6 @@ class GameState:
 			"quarter_seconds_remaining": self.clock,
 			"half_seconds_remaining": self.clock + (900 * (self.quarter % 2)),
 			"game_seconds_remaining": self.clock + (900 * (4 - self.quarter)),
-			"drive": self.drive,
 			"spread_line": self.possession.spread_line,
 			"total_line": self.total_line,
 			"posteam_timeouts_remaining": self.possession.timeouts,
@@ -223,16 +224,10 @@ class GameState:
 		return 
 
 
-	def log_play(self, play_result: PlayResult) -> PlayResult:
+	def log_play(self, play_result: PlayResult) -> dict:
 		"""Logs the context of the game state at each play."""
-		"""play_data = {
-			"play_type": play_result.play_type,
-			"yards_gained": play_result.yards,
-			"player": play_result.get('rusher', play_result.get('receiver',0)),
-			"play_time_elapsed": 'play_time_elapsed'
-		}"""
-		play_result.to_dict().update(self.game_context)
-		play_log = play_result
+		play_log = play_result.to_dict()
+		play_log.update(self.game_context)
 		self.pbp.append(play_log)
 		return play_log
 
