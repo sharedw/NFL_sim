@@ -1,7 +1,6 @@
 with base as (
     select
 		depth.team,
-
         depth.position,
         depth.gsis_id,
         coalesce(depth.game_id, weekly.game_id) as game_id,
@@ -58,7 +57,7 @@ with base as (
         on
             weekly.game_id = depth.game_id
             and weekly.player_id = depth.gsis_id
-    where depth.formation = 'Offense'
+    where coalesce(depth.formation, 'Offense') = 'Offense'
 ),
 
 snps as (
