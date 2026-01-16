@@ -15,7 +15,8 @@ B --> G{QB Kneel}
 C --> H[Choose Rusher]
 H --> I{Yards Rushed}
 D --> J[Choose Passer]
-J --> K[Choose Receiver]
+J --> Z{Sack Model}
+Z --> K[Choose Receiver]
 K --> L[Sim Air Yards]
 L --> M[Sim Completion]
 M --> N[Sim Yards After Catch]
