@@ -70,6 +70,8 @@ snps as (
         snaps.offense_pct
     from ids
     inner join snaps on ids.pfr_id = snaps.pfr_player_id
+	qualify row_number() over (partition BY
+	ids.gsis_id, snaps.game_id order by draft_round ) = 1
 )
 
 select 
